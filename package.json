@@ -1,0 +1,12 @@
+{
+  "name": "menti-jev",
+  "version": "1.0.2",
+  "private": true,
+  "description": "Browser-local Mentimeter quiz automation using Jev 1.14",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.64.1"
+  }
+}

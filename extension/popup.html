@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Menti · Jev</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+  <header><span class="mark">J</span><div><h1>Menti · Jev</h1><p>One question or the whole quiz.</p></div></header>
+  <div class="controls">
+    <button id="answerNow" type="button" disabled>Answer</button>
+    <button id="autopilot" type="button" aria-pressed="false" disabled>Autopilot <span id="autopilotState" aria-hidden="true">Off</span></button>
+  </div>
+  <p class="control-hint">Answer this screen once, or turn Autopilot on for each new question.</p>
+  <section class="latest-answer"><span>Last chosen answer</span><strong id="answer" aria-live="polite">No answer yet</strong></section>
+  <section class="status"><span id="dot"></span><div><strong id="status">Loading…</strong><p id="timing"></p></div></section>
+  <p id="message" role="status"></p>
+  <details id="settingsPanel"><summary>Settings</summary>
+    <form id="settings">
+      <label>API provider<select id="provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select></label>
+      <label><span id="keyLabel">TypeSafe API key</span><input id="apiKey" type="password" autocomplete="off" placeholder="Paste only your API key"></label>
+      <p id="providerHint" class="hint">Your key stays in this browser profile.</p>
+      <details><summary>Advanced settings</summary>
+        <div class="row"><label>Minimum confidence<input id="minConfidence" type="number" min="0" max="1" step="0.05"></label><label>API deadline, ms<input id="timeoutMs" type="number" min="200" max="15000" step="100"></label></div>
+        <label>Answer bank, JSON<textarea id="answerBank" rows="4" spellcheck="false" placeholder='{"What is 2 + 2?": "4"}'></textarea></label>
+        <p class="hint">Exact question → answer. Required for typed answers.</p>
+        <label>Detection settling time, ms<input id="settleMs" type="number" min="0" max="250"></label>
+        <label>Question selector<input id="questionSelector" placeholder="Automatic"></label>
+        <label>Answer-option selector<input id="optionSelector" placeholder="Automatic"></label>
+        <label>Typed-answer input selector<input id="inputSelector" placeholder="Automatic"></label>
+        <label>Submit-button selector<input id="submitSelector" placeholder="Automatic"></label>
+      </details>
+      <button type="submit" class="save">Save settings</button>
+    </form>
+  </details>
+  <footer>Use these controls with your <a href="https://www.menti.com" target="_blank" rel="noreferrer">Mentimeter</a> participant tab open.</footer>
+  <script src="core.js"></script><script src="popup.js"></script>
+</body></html>

@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Menti · Jev 1.14",
+  "version": "1.0.2",
+  "description": "Detect visible Mentimeter quiz questions and answer with Jev 1.14.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://api.typesafe.ai/*", "https://openrouter.ai/*", "https://menti.com/*", "https://www.menti.com/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html" },
+  "content_scripts": [{
+    "matches": ["https://menti.com/*", "https://www.menti.com/*"],
+    "js": ["core.js", "content.js"],
+    "run_at": "document_idle"
+  }]
+}
