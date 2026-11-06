@@ -1,108 +1,106 @@
 importScripts('core.js');
-const C = MentiJev;
-const cache = new Map();
+const C = ClickIt;
 const jobs = new Map();
 const statuses = new Map();
-const manualGrants = new Map();
 let settings;
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
   settings = C.validateSettings((await chrome.storage.local.get('settings')).settings || {});
+  // Drop settings from the former automatic/typed-answer modes on upgrade.
+  await chrome.storage.local.set({ settings });
 })();
-function isParticipant(sender) {
-  try { return Boolean(sender.tab) && ['https://menti.com', 'https://www.menti.com'].includes(new URL(sender.url).origin); }
-  catch { return false; }
-}
-function isPopup(sender) {
-  return sender.url === chrome.runtime.getURL('popup.html');
-}
-function cancel(tabId, requestId) {
-  const job = jobs.get(tabId);
-  if (job && (!requestId || job.id === requestId)) {
-    job.controller.abort(); jobs.delete(tabId);
-  }
-}
-async function decide(message, sender) {
-  const grant = manualGrants.get(sender.tab.id);
-  const manual = Boolean(message.manualId && grant?.id === message.manualId && grant.expiresAt > Date.now());
-  if (manual) manualGrants.delete(sender.tab.id);
-  if (!settings.enabled && !manual) throw new Error('Press Answer or turn on Autopilot.');
-  const config = settings;
+
+async function decide(q, config, signal) {
   const provider = C.providers[config.provider];
-  if (!config.apiKey) throw new Error(`Add a ${provider.name} API key in the extension.`);
-  const q = C.validateQuestion(message.quiz);
-  const key = JSON.stringify([config.provider, q]);
-  cancel(sender.tab.id);
-  if (cache.has(key)) return { ...cache.get(key), cached: true, apiMs: 0 };
-  const controller = new AbortController();
-  const job = { id: message.requestId, controller };
-  jobs.set(sender.tab.id, job);
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   const started = performance.now();
+  const response = await fetch(provider.endpoint, {
+    method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(C.requestBody(q, config.provider)), signal, credentials: 'omit'
+  });
+  if (!response.ok) {
+    if (response.status === 401) throw new Error(`${provider.name} rejected the API key (HTTP 401). Select the provider that issued your key and save its key in Settings.`);
+    const descriptions = { 402: 'Check provider credits or spending limits', 403: 'API access denied', 429: 'API rate limit reached', 529: 'Jev is temporarily overloaded' };
+    throw new Error(`${descriptions[response.status] || 'Request failed'} (HTTP ${response.status}). Press Answer to retry.`);
+  }
+  return { ...C.parseAnswer(await response.json(), q.options.length, config.provider), apiMs: Math.round(performance.now() - started) };
+}
+
+async function run(tabId, job, config) {
+  let target;
+  const started = performance.now();
+  const report = value => {
+    if (jobs.get(tabId) !== job) return;
+    const previous = statuses.get(tabId);
+    statuses.set(tabId, { ...value, lastAction: value.answer ? value : previous?.lastAction });
+    if (statuses.size > 64) statuses.delete(statuses.keys().next().value);
+  };
   try {
-    const response = await fetch(provider.endpoint, {
-      method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(C.requestBody(q, config.provider)), signal: controller.signal, credentials: 'omit'
-    });
-    if (!response.ok) {
-      if (response.status === 401) throw new Error(`${provider.name} rejected the API key (HTTP 401). Select the provider that issued your key, paste its key, and save settings.`);
-      const descriptions = { 402: `${provider.name} credits or spending limit need attention`, 403: 'API access denied', 429: 'API rate limit reached', 529: 'Jev is temporarily overloaded' };
-      throw new Error(`${descriptions[response.status] || 'Jev request failed'} (HTTP ${response.status}). Press Answer to retry.`);
-    }
-    const result = { ...C.parseAnswer(await response.json(), q.options.length, config.provider), apiMs: Math.round(performance.now() - started), cached: false };
-    if (controller.signal.aborted) throw new Error('Request cancelled.');
-    cache.set(key, result);
-    if (cache.size > 128) cache.delete(cache.keys().next().value);
-    return result;
+    report({ text: 'Reading question…' });
+    let snapshot;
+    try {
+      [snapshot] = await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    } catch { throw new Error('Cannot access this page. Open a regular webpage and invoke ClickIt from its toolbar icon.'); }
+    if (snapshot?.result?.error) throw new Error(snapshot.result.error);
+    if (!snapshot?.result) throw new Error('No unambiguous single-choice text question found. This layout is unsupported.');
+    target = { tabId, documentIds: [snapshot.documentId] };
+    const q = C.validateQuestion(snapshot.result);
+    report({ text: 'Jev is choosing…' });
+    const timeout = setTimeout(() => job.controller.abort(), config.timeoutMs);
+    let result;
+    try { result = await decide(q, config, job.controller.signal); }
+    finally { clearTimeout(timeout); }
+    if (job.controller.signal.aborted) throw new Error('Request cancelled.');
+    if (result.confidence < config.minConfidence) throw new Error('Skipped: confidence below your threshold.');
+    const [action] = await chrome.scripting.executeScript({
+      target,
+      func: index => {
+        try {
+          if (!globalThis.ClickItPage) throw new Error('The page changed. Press Answer again.');
+          return globalThis.ClickItPage.click(index);
+        } catch (error) { return { error: error.message }; }
+      },
+      args: [result.index]
+    }).catch(() => { throw new Error('The page changed or access was lost. Press Answer again.'); });
+    if (action?.result?.error) throw new Error(action.result.error);
+    if (!action?.result) throw new Error('The page changed. Press Answer again.');
+    report({ text: action.result.clicked ? 'Answer clicked. Submit it yourself if needed.' : 'Answer already selected. No click needed.',
+      answer: q.options[result.index], confidence: result.confidence, apiMs: result.apiMs, totalMs: Math.round(performance.now() - started) });
   } catch (error) {
-    if (controller.signal.aborted) throw new Error('Request expired or was cancelled. Press Answer if the question is still open.');
-    if (error instanceof TypeError) throw new Error(`Cannot reach ${provider.name}. Check your connection and press Answer.`);
-    throw error;
+    report({ text: job.controller.signal.aborted ? 'Request expired or was cancelled. Press Answer to retry.' :
+      error instanceof TypeError ? `Cannot reach ${C.providers[config.provider].name}. Check your connection and press Answer.` : error.message });
   } finally {
-    clearTimeout(timeout);
-    if (jobs.get(sender.tab.id) === job) jobs.delete(sender.tab.id);
+    if (target) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
+    if (jobs.get(tabId) === job) jobs.delete(tabId);
   }
 }
+
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  if (sender.id !== chrome.runtime.id || (!isParticipant(sender) && !isPopup(sender))) return;
+  // Page scripts have no API or settings access. Only the extension popup can start a run.
+  if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('popup.html')) return;
   (async () => {
     await ready;
-    if (message.type === 'settings') return C.publicSettings(settings);
-    if (message.type === 'decide' && isParticipant(sender)) return decide(message, sender);
-    if (message.type === 'cancel' && isParticipant(sender)) { cancel(sender.tab.id, message.requestId); return {}; }
-    if (message.type === 'status' && isParticipant(sender)) {
-      statuses.set(sender.tab.id, { ...message.status, updatedAt: Date.now() });
-      if (statuses.size > 64) statuses.delete(statuses.keys().next().value);
-      return {};
-    }
-    if (message.type === 'inspect' && isPopup(sender)) {
+    if (message.type === 'inspect') {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      return { settings, status: statuses.get(tab?.id) || { text: 'Open a Mentimeter participant tab.' } };
+      return { settings, busy: jobs.has(tab?.id), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
     }
-    if (message.type === 'save' && isPopup(sender)) {
-      const next = C.validateSettings(message.settings);
-      for (const id of jobs.keys()) cancel(id);
-      manualGrants.clear();
-      cache.clear();
-      settings = next;
+    if (message.type === 'save') {
+      if (jobs.size) throw new Error('Wait for the current answer before saving settings.');
+      settings = C.validateSettings(message.settings);
       await chrome.storage.local.set({ settings });
-      const tabs = await chrome.tabs.query({});
-      await Promise.allSettled(tabs.map(tab => chrome.tabs.sendMessage(tab.id, { type: 'settingsChanged', settings: C.publicSettings(settings) })));
       return { saved: true };
     }
-    if ((message.type === 'answer' || message.type === 'retry') && isPopup(sender)) {
+    if (message.type === 'answer') {
+      if (!settings.apiKey) throw new Error('Add your API key in Settings first.');
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.url || !['https://menti.com', 'https://www.menti.com'].includes(new URL(tab.url).origin)) throw new Error('Open your Mentimeter participant tab, then press Answer.');
-      const manualId = crypto.randomUUID();
-      manualGrants.set(tab.id, { id: manualId, expiresAt: Date.now() + 15000 });
-      let reply;
-      try { reply = await chrome.tabs.sendMessage(tab.id, { type: 'answer', manualId }); }
-      catch { manualGrants.delete(tab.id); throw new Error('Refresh the Mentimeter tab, then press Answer.'); }
-      if (!reply?.ok) { manualGrants.delete(tab.id); throw new Error(reply?.error || 'No readable question on this screen.'); }
+      if (!tab?.id || (tab.url && !/^https?:\/\//.test(tab.url))) throw new Error('Open a regular webpage and invoke ClickIt from its toolbar icon.');
+      if (jobs.has(tab.id)) throw new Error('Already answering this tab.');
+      const job = { controller: new AbortController() };
+      jobs.set(tab.id, job);
+      void run(tab.id, job, settings);
       return { started: true };
     }
     throw new Error('Unknown request.');
   })().then(data => respond({ ok: true, data }), error => respond({ ok: false, error: error.message }));
   return true;
 });
-chrome.tabs.onRemoved.addListener(tabId => { cancel(tabId); statuses.delete(tabId); manualGrants.delete(tabId); });
+chrome.tabs.onRemoved.addListener(tabId => { jobs.get(tabId)?.controller.abort(); jobs.delete(tabId); statuses.delete(tabId); });

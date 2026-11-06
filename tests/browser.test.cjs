@@ -1,379 +1,365 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const { setTimeout: delay } = require('node:timers/promises');
 const { chromium } = require('playwright');
-let context, worker, extensionId;
-const payload = (choice = 'a1', confidence = 0.97) => ({ model: 'jev-1.14.0', answers: { answer: { type: 'choice', choice, confidence } } });
-const fixture = `<!doctype html><main data-slide-id="one"><h1>What is 2 + 2?</h1><div data-testid="answer-options"><button data-testid="answer-option">3</button><button data-testid="answer-option">4</button></div><button id="submit" disabled>Submit</button></main><script>
+let context, worker, extensionId, browserSession, sequence = 0;
+const payload = (choice = 'a1', confidence = 0.97, model = 'jev-1.14.0') => ({ model, answers: { answer: { type: 'choice', choice, confidence } } });
+const fixture = `<!doctype html><main><h1>What is 2 + 2?</h1><div><button type="button" class="option">3</button><button type="button" class="option">4</button></div><button id="submit">Submit</button></main><script>
 window.clicks=[];window.submissions=0;
-document.addEventListener('click',e=>{if(e.target.matches('[data-testid="answer-option"],.option')){clicks.push(e.target.textContent);setTimeout(()=>document.getElementById('submit').disabled=false,20)}if(e.target.id==='submit'){submissions++;e.target.disabled=true}})
+document.addEventListener('click',e=>{if(e.target.matches('.option,input[type="radio"],[role="radio"]'))clicks.push(e.target.textContent||e.target.value);if(e.target.id==='submit')submissions++});
 </script>`;
+
 before(async () => {
   const extension = path.resolve(__dirname, '../extension');
   context = await chromium.launchPersistentContext('', {
     channel: 'chromium', headless: true,
-    args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
+    args: ['--enable-unsafe-extension-debugging', `--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
   });
   worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
   extensionId = worker.url().split('/')[2];
-  await worker.evaluate(async () => {
-    await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
+  browserSession = await context.browser().newBrowserCDPSession();
+  await worker.evaluate(() => {
     globalThis.apiCalls = [];
     globalThis.mock = {};
     globalThis.fetch = async (url, init) => {
       const config = { ...globalThis.mock };
-      globalThis.apiCalls.push({ url, body: JSON.parse(init.body), authorization: init.headers.Authorization });
+      apiCalls.push({ url, body: JSON.parse(init.body), authorization: init.headers.Authorization, credentials: init.credentials });
       await new Promise((resolve, reject) => {
+        if (init.signal.aborted) return reject(new DOMException('Aborted', 'AbortError'));
         const timer = setTimeout(resolve, config.delay || 0);
         init.signal.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
       });
-      return new Response(JSON.stringify(config.body), { status: config.status || 200, headers: { 'Content-Type': 'application/json' } });
+      if (config.networkError) throw new TypeError('Network failed');
+      return new Response(JSON.stringify(config.body), { status: config.status || 200 });
     };
   });
 });
 after(async () => { await context?.close(); });
-async function configure(overrides = {}, response = {}) {
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  await popup.waitForFunction(() => document.getElementById('timeoutMs').value !== '');
-  await worker.evaluate(config => { globalThis.mock = config; globalThis.apiCalls = []; }, { body: payload(), ...response });
-  const reply = await popup.evaluate(async overrides => chrome.runtime.sendMessage({ type: 'save', settings: {
-    enabled: true, apiKey: 'fake-test-key', timeoutMs: 2500, settleMs: 0, ...overrides
-  } }), overrides);
-  assert.equal(reply.ok, true, reply.error);
-  await popup.close();
+
+async function until(check) {
+  const deadline = Date.now() + 5000;
+  while (!await check()) {
+    if (Date.now() > deadline) throw new Error('Timed out waiting for extension');
+    await delay(15);
+  }
 }
-async function open(html = fixture) {
+async function popup() {
   const page = await context.newPage();
-  await page.route('https://www.menti.com/**', route => route.fulfill({ contentType: 'text/html', body: html }));
-  await page.goto('https://www.menti.com/test-quiz');
+  await page.setViewportSize({ width: 360, height: 520 });
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.waitForFunction(() => document.getElementById('timeoutMs').value !== '');
   return page;
 }
-async function status(page, expression) {
-  await page.waitForFunction(expression, null, { timeout: 5000 });
+async function configure(overrides = {}, response = {}) {
+  await until(() => worker.evaluate(() => jobs.size === 0));
+  const controls = await popup();
+  try {
+    await worker.evaluate(config => { globalThis.mock = config; globalThis.apiCalls = []; }, { body: payload(), ...response });
+    const reply = await controls.evaluate(settings => chrome.runtime.sendMessage({ type: 'save', settings }), {
+      provider: 'typesafe', apiKey: 'fake-test-key', timeoutMs: 2500, minConfidence: 0, ...overrides
+    });
+    assert.equal(reply.ok, true, reply.error);
+  } finally { await controls.close(); }
+}
+async function open(html = fixture, origin = 'https://quiz.example', grant = true) {
+  const page = await context.newPage();
+  await page.route(`${origin}/**`, route => route.fulfill({ contentType: 'text/html', body: html }));
+  await page.goto(`${origin}/question-${++sequence}`);
+  if (grant) {
+    // Trigger the real toolbar action to grant activeTab. The shipped manifest is unchanged.
+    const { targetInfos } = await browserSession.send('Target.getTargets', { filter: [{ type: 'tab' }] });
+    const target = targetInfos.find(target => target.url === page.url());
+    await browserSession.send('Extensions.triggerAction', { id: extensionId, targetId: target.targetId });
+  }
+  return page;
+}
+async function tabId(page) {
+  await page.bringToFront();
+  return worker.evaluate(async () => (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id);
 }
 async function calls() { return worker.evaluate(() => apiCalls); }
-async function inspect(page) {
-  const popup = await context.newPage();
+async function start(page, controls) {
   await page.bringToFront();
-  const id = (await worker.evaluate(async () => (await chrome.tabs.query({})).map(t => ({ id: t.id, url: t.url })))).find(t => t.url === page.url())?.id;
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  // Read stored per-tab status directly without changing the production message checks.
-  const result = await worker.evaluate(id => statuses.get(id), id);
-  await popup.close();
-  return result;
+  return controls.evaluate(() => chrome.runtime.sendMessage({ type: 'answer' }));
 }
-test('real extension sends the pinned API contract and clicks/submits once', async () => {
+async function finished(page) {
+  const id = await tabId(page);
+  await until(() => worker.evaluate(id => !jobs.has(id), id));
+  return worker.evaluate(id => statuses.get(id), id);
+}
+async function scenario(html, action, origin) {
+  const page = await open(html, origin);
+  const controls = await popup();
+  try { await action(page, controls); }
+  finally { await controls.close(); await page.close(); }
+}
+
+test('manifest has only user-triggered page access; old settings are discarded', async () => {
+  const manifest = require('../extension/manifest.json');
+  assert.deepEqual(manifest.permissions, ['storage', 'activeTab', 'scripting']);
+  assert.equal(manifest.content_scripts, undefined);
+  assert.deepEqual(manifest.host_permissions, ['https://api.typesafe.ai/*', 'https://openrouter.ai/*']);
+  await configure({ enabled: true, answerBank: { Question: 'Answer' }, questionSelector: 'h1', settleMs: 8 });
+  const saved = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
+  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'minConfidence', 'provider', 'timeoutMs']);
+  assert.equal(saved.apiKey, 'fake-test-key');
+});
+
+test('Answer makes one click, never submits, and never follows new questions', async () => {
   await configure();
-  const page = await open();
-  try {
-    await status(page, () => window.submissions === 1);
+  await scenario(fixture, async (page, controls) => {
+    await page.bringToFront();
+    await delay(100);
+    assert.equal((await calls()).length, 0);
+    assert.equal(await page.evaluate(() => window.ClickItPage), undefined);
+    assert.equal((await start(page, controls)).ok, true);
+    const result = await finished(page);
+    assert.equal(result.answer, '4');
     assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-    const requests = await calls();
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0].url, 'https://api.typesafe.ai/v1/systemone');
-    assert.equal(requests[0].body.model, 'jev-1.14.0');
-    assert.deepEqual(requests[0].body.questions.answer.criteria, { a0: '3', a1: '4' });
-    await page.evaluate(() => { for (let i = 0; i < 30; i++) document.querySelector('h1').className = `tick${i}`; });
-    await page.waitForTimeout(600);
-    assert.equal((await calls()).length, 1);
-    assert.equal(await page.evaluate(() => submissions), 1);
-  } finally { await page.close(); }
-});
-test('late decisions cannot answer a later question', async () => {
-  await configure({}, { delay: 250 });
-  const page = await open();
-  try {
-    while (!(await calls()).length) await page.waitForTimeout(10);
-    await page.evaluate(() => { document.querySelector('h1').textContent = 'What is 3 + 3?'; document.querySelectorAll('[data-testid="answer-option"]')[1].textContent = '6'; });
-    await status(page, () => submissions === 1);
-    assert.deepEqual(await page.evaluate(() => clicks), ['6']);
-  } finally { await page.close(); }
-});
-test('pausing during inference prevents the click', async () => {
-  await configure({}, { delay: 400 });
-  const page = await open();
-  try {
-    while (!(await calls()).length) await page.waitForTimeout(10);
-    await configure({ enabled: false });
-    await page.waitForTimeout(650);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
-  } finally { await page.close(); }
-});
-test('disabled options are prefetched and answered when they unlock', async () => {
-  await configure({ timeoutMs: 200 });
-  const page = await open(fixture.replaceAll('<button data-testid="answer-option"', '<button disabled data-testid="answer-option"'));
-  try {
-    while (!(await calls()).length) await page.waitForTimeout(10);
-    await page.waitForTimeout(400);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
-    await page.evaluate(() => document.querySelectorAll('[data-testid="answer-option"]').forEach(n => n.disabled = false));
-    await status(page, () => submissions === 1);
-    assert.equal((await calls()).length, 1);
-  } finally { await page.close(); }
-});
-test('rate limits do not cause a request storm', async () => {
-  await configure({}, { status: 429 });
-  const page = await open();
-  try {
-    await page.waitForTimeout(850);
-    assert.equal((await calls()).length, 1);
     assert.equal(await page.evaluate(() => submissions), 0);
-    assert.match((await inspect(page)).text, /rate limit/);
-  } finally { await page.close(); }
-});
-test('confidence threshold and malformed responses never click', async () => {
-  for (const body of [payload('a1', 0.2), payload('a9'), { ...payload(), model: 'jev-1.13.0' }]) {
-    await configure({ minConfidence: 0.8 }, { body });
-    const page = await open();
-    try { await page.waitForTimeout(250); assert.deepEqual(await page.evaluate(() => clicks), []); }
-    finally { await page.close(); }
-  }
-});
-test('cached answers are reused and remapped when options reorder', async () => {
-  await configure();
-  const page = await open();
-  try {
-    await status(page, () => submissions === 1);
-    await page.evaluate(() => document.querySelector('main').setAttribute('data-slide-id', 'two'));
-    await status(page, () => submissions === 2);
+    const [request] = await calls();
+    assert.equal(request.url, 'https://api.typesafe.ai/v1/systemone');
+    assert.equal(request.body.model, 'jev-1.14.0');
+    assert.deepEqual(request.body.state, { question: 'What is 2 + 2?' });
+    assert.deepEqual(request.body.questions.answer.criteria, { a0: '3', a1: '4' });
+    assert.equal(request.credentials, 'omit');
+    await page.evaluate(() => { document.querySelector('h1').textContent = 'What is 3 + 3?'; document.querySelectorAll('.option')[1].textContent = '6'; });
+    await delay(600);
     assert.equal((await calls()).length, 1);
-    await worker.evaluate(body => { mock.body = body; }, payload('a0'));
-    await page.evaluate(() => {
-      const options = document.querySelectorAll('[data-testid="answer-option"]');
-      options[0].textContent = '4'; options[1].textContent = '3';
-      document.querySelector('main').setAttribute('data-slide-id', 'three');
-    });
-    await status(page, () => submissions === 3);
-    assert.deepEqual(await page.evaluate(() => clicks), ['4', '4', '4']);
-    assert.equal((await calls()).length, 2);
-  } finally { await page.close(); }
-});
-test('typed answers use native input events and an exact answer bank', async () => {
-  await configure({ answerBank: { 'What is 2 + 2?': '4' } });
-  const page = await open(`<!doctype html><main><h1>What is 2 + 2?</h1><input aria-label="Your answer" type="text"><button id="submit" disabled>Submit</button></main><script>window.submissions=0;document.querySelector('input').addEventListener('input',()=>{window.received=document.querySelector('input').value;document.querySelector('button').disabled=false});document.querySelector('button').onclick=()=>submissions++;</script>`);
-  try {
-    await status(page, () => submissions === 1);
-    assert.equal(await page.evaluate(() => received), '4');
-    assert.equal((await calls()).length, 0);
-  } finally { await page.close(); }
-});
-test('unknown typed questions stay unanswered', async () => {
-  await configure();
-  const page = await open('<main><h1>Unknown question?</h1><input type="text" aria-label="Your answer"><button>Submit</button></main>');
-  try {
-    await page.waitForTimeout(250);
-    assert.equal(await page.locator('input').inputValue(), '');
-    assert.equal((await calls()).length, 0);
-  } finally { await page.close(); }
-});
-test('semantic sibling buttons work without test IDs', async () => {
-  await configure();
-  const page = await open(fixture.replaceAll('data-testid="answer-option"', 'class="option"').replace('data-testid="answer-options"', 'class="options"'));
-  try { await status(page, () => submissions === 1); assert.deepEqual(await page.evaluate(() => clicks), ['4']); }
-  finally { await page.close(); }
-});
-test('timeout is bounded and Retry can recover', async () => {
-  await configure({ timeoutMs: 200 }, { delay: 600 });
-  const page = await open();
-  try {
-    await page.waitForTimeout(400);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    await start(page, controls);
+    assert.equal((await finished(page)).answer, '6');
+    assert.deepEqual(await page.evaluate(() => clicks), ['4', '6']);
     assert.equal(await page.evaluate(() => submissions), 0);
-    await worker.evaluate(() => { mock.delay = 0; });
-    const popup = await context.newPage();
-    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await worker.evaluate(async () => {
-      const tab = (await chrome.tabs.query({})).find(t => t.url === 'https://www.menti.com/test-quiz');
-      await chrome.tabs.sendMessage(tab.id, { type: 'retry' });
-    });
-    await popup.close();
-    await status(page, () => submissions === 1);
-    assert.equal((await calls()).length, 2);
-  } finally { await page.close(); }
+  });
 });
-test('popup saves settings and public settings exclude the API key', async () => {
-  await configure({ enabled: false });
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  try {
-    await popup.waitForFunction(() => document.getElementById('timeoutMs').value !== '');
-    await popup.getByText('Settings', { exact: true }).click();
-    await popup.getByText('Advanced settings', { exact: true }).click();
-    await popup.locator('#minConfidence').fill('0.3');
-    await popup.getByRole('button', { name: 'Save settings' }).click();
-    await popup.waitForFunction(() => document.getElementById('message').textContent.includes('Saved.'));
-    assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings.minConfidence), 0.3);
-    const page = await open();
-    const tabId = await worker.evaluate(async () => (await chrome.tabs.query({})).find(t => t.url === 'https://www.menti.com/test-quiz').id);
-    const publicConfig = await worker.evaluate(() => MentiJev.publicSettings(settings));
-    assert.equal('apiKey' in publicConfig, false);
-    assert.ok(tabId);
-    await page.close();
-    await popup.setViewportSize({ width: 380, height: 650 });
-    await popup.screenshot({ path: path.resolve(__dirname, '../test-results/popup.png'), fullPage: true });
-  } finally { await popup.close(); }
-});
-test('OpenRouter routes credentials and decisions to its own endpoint', async () => {
-  for (const model of ['typesafe/jev-1.14', 'typesafe/jev-1.14-20261014']) {
-    await configure({ provider: 'openrouter', apiKey: '  Bearer fake-openrouter-key  ' }, { body: { ...payload(), model } });
-    const page = await open();
-    try {
-      await status(page, () => submissions === 1);
-      const requests = await calls();
-      assert.equal(requests.length, 1);
-      assert.equal(requests[0].url, 'https://openrouter.ai/api/alpha/decisions');
-      assert.equal(requests[0].body.model, 'typesafe/jev-1.14');
-      assert.equal(requests[0].authorization, 'Bearer fake-openrouter-key');
+
+test('detection works on unrelated HTTP and HTTPS sites with plain sibling buttons', async () => {
+  for (const origin of ['http://study.example', 'https://another-quiz.example']) {
+    await configure();
+    await scenario(fixture, async (page, controls) => {
+      await start(page, controls);
+      assert.equal((await finished(page)).answer, '4');
       assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-    } finally { await page.close(); }
+    }, origin);
   }
 });
-test('OpenRouter rejects answers from the wrong model family', async () => {
-  await configure({ provider: 'openrouter' }, { body: { ...payload(), model: 'typesafe/jev-1.13-20260917' } });
-  const page = await open();
-  try {
-    await page.waitForTimeout(300);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
-    assert.match((await inspect(page)).text, /did not return Jev 1.14/);
-  } finally { await page.close(); }
+
+test('native labelled radios and ARIA radio groups select once and skip an already-selected answer', async () => {
+  const layouts = [
+    '<fieldset><legend>What is 2 + 2?</legend><label><input type="radio" name="answer" value="3">3</label><label><input type="radio" name="answer" value="4">4</label></fieldset>',
+    '<p id="question">What is 2 + 2?</p><div role="radiogroup" aria-labelledby="question"><div role="radio" aria-checked="false">3</div><div role="radio" aria-checked="false">4</div></div>'
+  ];
+  for (const layout of layouts) {
+    await configure();
+    const html = fixture.replace(/<main>.*<\/main>/, `<main>${layout}</main>`);
+    await scenario(html, async (page, controls) => {
+      await start(page, controls);
+      assert.equal((await finished(page)).answer, '4');
+      assert.equal(await page.evaluate(() => clicks.length), 1);
+      await page.evaluate(() => { const node = document.querySelectorAll('input,[role="radio"]')[1]; if (node.matches('input')) node.checked = true; else node.setAttribute('aria-checked', 'true'); });
+      await start(page, controls);
+      assert.match((await finished(page)).text, /already selected/);
+      assert.equal(await page.evaluate(() => clicks.length), 1);
+    });
+  }
 });
-test('401 gives provider-specific recovery instructions without reflecting secrets', async () => {
-  await configure({ provider: 'openrouter' }, { status: 401, body: { error: { message: 'fake-test-key' } } });
+
+test('missing, ambiguous, multi-select, typed, image-only, and disabled questions do not call the API', async () => {
+  const layouts = [
+    '<main><h1>Waiting</h1></main>',
+    '<main><h1>Question?</h1><textarea></textarea></main>',
+    '<main><h1>Pick several</h1><label><input type="checkbox">A</label><label><input type="checkbox">B</label><button>Submit</button></main>',
+    '<main><h1>Pick one</h1><div><button><img src="a.png"></button><button><img src="b.png"></button></div></main>',
+    fixture.replaceAll('class="option"', 'class="option" disabled'),
+    fixture.replace('>3</button>', '>4</button>'),
+    fixture.replace('</main>', '<section><h2>Another question?</h2><div><button>A</button><button>B</button></div></section></main>'),
+    fixture.replace('<h1>What is 2 + 2?</h1>', '<h1>Question one?</h1><h2>Question two?</h2>')
+  ];
+  for (const html of layouts) {
+    await configure();
+    await scenario(html, async (page, controls) => {
+      await start(page, controls);
+      const result = await finished(page);
+      assert.match(result.text, /unsupported|Multiple|ambiguous|disabled/);
+      assert.equal((await calls()).length, 0);
+    });
+  }
+});
+
+test('hidden controls and navigation are excluded from choices', async () => {
+  await configure();
+  await scenario(fixture.replace('<main>', '<nav><button>Home</button><button>Account</button></nav><main>')
+    .replace('<button type="button" class="option">3', '<button hidden class="option">hidden</button><button type="button" class="option">3'), async (page, controls) => {
+    await start(page, controls);
+    await finished(page);
+    assert.deepEqual((await calls())[0].body.questions.answer.criteria, { a0: '3', a1: '4' });
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+  });
+});
+
+test('changes and replaced controls invalidate a pending decision without answering a later question', async () => {
+  const changes = [
+    () => { document.querySelector('h1').textContent = 'Different question?'; },
+    () => { document.querySelectorAll('.option')[1].textContent = 'Different answer'; },
+    () => { const node = document.querySelectorAll('.option')[1]; node.replaceWith(node.cloneNode(true)); },
+    () => { document.querySelectorAll('.option')[1].disabled = true; },
+    () => { document.querySelector('main').setAttribute('data-slide-id', 'next'); },
+    () => { history.pushState({}, '', '/next-question'); }
+  ];
+  for (const change of changes) {
+    await configure({}, { delay: 200 });
+    await scenario(fixture, async (page, controls) => {
+      await start(page, controls);
+      await until(async () => (await calls()).length === 1);
+      await page.evaluate(change);
+      assert.match((await finished(page)).text, /changed/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+      assert.equal((await calls()).length, 1);
+    });
+  }
+});
+
+test('navigation to an identical question cannot receive the old decision', async () => {
+  await configure({}, { delay: 200 });
+  await scenario(fixture, async (page, controls) => {
+    await start(page, controls);
+    await until(async () => (await calls()).length === 1);
+    await page.goto(`${new URL(page.url()).origin}/replacement`);
+    await finished(page);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+    assert.equal((await calls()).length, 1);
+  });
+});
+
+test('repeated requests are rejected while busy and closing the popup does not cancel the authorized click', async () => {
+  await configure({}, { delay: 200 });
   const page = await open();
+  const controls = await popup();
   try {
-    await page.waitForTimeout(350);
-    const result = await inspect(page);
+    const replies = await Promise.all([start(page, controls), start(page, controls)]);
+    assert.equal(replies.filter(reply => reply.ok).length, 1);
+    assert.match(replies.find(reply => !reply.ok).error, /Already answering/);
+    await controls.close();
+    await finished(page);
+    assert.equal((await calls()).length, 1);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+  } finally { if (!controls.isClosed()) await controls.close(); await page.close(); }
+});
+
+test('confidence and response validation prevent invalid clicks', async () => {
+  const bodies = [payload('a1', 0.2), payload('a9'), payload('a1', 2), payload('bad'), payload('a1', 0.9, 'jev-1.13.0')];
+  for (const body of bodies) {
+    await configure({ minConfidence: 0.8 }, { body });
+    await scenario(fixture, async (page, controls) => {
+      await start(page, controls);
+      assert.match((await finished(page)).text, /threshold|invalid|did not return/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+    });
+  }
+});
+
+test('timeouts and rate limits stop; another explicit press retries', async () => {
+  for (const response of [{ delay: 600 }, { status: 429 }, { networkError: true }]) {
+    await configure({ timeoutMs: 200 }, response);
+    await scenario(fixture, async (page, controls) => {
+      await start(page, controls);
+      assert.match((await finished(page)).text, /expired|rate limit|Cannot reach/);
+      await delay(300);
+      assert.equal((await calls()).length, 1);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+      await worker.evaluate(body => { mock = { body }; }, payload());
+      await start(page, controls);
+      assert.equal((await finished(page)).answer, '4');
+      assert.equal((await calls()).length, 2);
+      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    });
+  }
+});
+
+test('OpenRouter keeps its credentials and pinned model contract', async () => {
+  for (const model of ['typesafe/jev-1.14', 'typesafe/jev-1.14-20261014']) {
+    await configure({ provider: 'openrouter', apiKey: ' Bearer fake-openrouter-key ' }, { body: payload('a1', 0.97, model) });
+    await scenario(fixture, async (page, controls) => {
+      await start(page, controls);
+      assert.equal((await finished(page)).answer, '4');
+      const [request] = await calls();
+      assert.equal(request.url, 'https://openrouter.ai/api/alpha/decisions');
+      assert.equal(request.body.model, 'typesafe/jev-1.14');
+      assert.equal(request.authorization, 'Bearer fake-openrouter-key');
+    });
+  }
+  await configure({ provider: 'openrouter' }, { body: payload('a1', 0.9, 'typesafe/jev-1.13') });
+  await scenario(fixture, async (page, controls) => {
+    await start(page, controls);
+    assert.match((await finished(page)).text, /did not return Jev 1.14/);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+  });
+});
+
+test('authentication errors do not echo provider response bodies or secrets', async () => {
+  await configure({ provider: 'openrouter' }, { status: 401, body: { error: 'fake-test-key' } });
+  await scenario(fixture, async (page, controls) => {
+    await start(page, controls);
+    const result = await finished(page);
     assert.match(result.text, /OpenRouter rejected the API key \(HTTP 401\)/);
-    assert.match(result.text, /Select the provider/);
     assert.doesNotMatch(result.text, /fake-test-key/);
-    assert.equal((await calls()).length, 1);
     assert.deepEqual(await page.evaluate(() => clicks), []);
-  } finally { await page.close(); }
+  });
 });
-test('provider selector persists and rejects unknown providers and malformed keys', async () => {
-  await configure({ enabled: false });
-  const popup = await context.newPage();
-  try {
-    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await popup.waitForFunction(() => document.getElementById('timeoutMs').value !== '');
-    await popup.getByText('Settings', { exact: true }).click();
-    await popup.locator('#provider').selectOption('openrouter');
-    assert.equal(await popup.locator('#keyLabel').textContent(), 'OpenRouter API key');
-    await popup.getByRole('button', { name: 'Save settings' }).click();
-    await popup.waitForFunction(() => document.getElementById('message').textContent.includes('Saved.'));
-    await popup.reload();
-    await popup.waitForFunction(() => document.getElementById('provider').value === 'openrouter');
-    const errors = await worker.evaluate(() => ['unknown-provider', 'malformed-key'].map(kind => {
-      try { MentiJev.validateSettings(kind === 'unknown-provider' ? { provider: 'elsewhere' } : { apiKey: 'two words' }); return ''; }
-      catch (e) { return e.message; }
-    }));
-    assert.match(errors[0], /Select TypeSafe or OpenRouter/);
-    assert.match(errors[1], /without spaces/);
-    await popup.setViewportSize({ width: 380, height: 760 });
-    await popup.screenshot({ path: path.resolve(__dirname, '../test-results/popup-openrouter.png'), fullPage: true });
-  } finally { await popup.close(); }
+
+test('popup saves lean settings, shows only the latest answer, and keeps it on reopening', async () => {
+  await configure();
+  await scenario(fixture, async (page, controls) => {
+    assert.equal(await controls.locator('#autopilot,#answerBank,textarea').count(), 0);
+    await controls.getByText('Settings', { exact: true }).click();
+    await controls.locator('#minConfidence').fill('0.3');
+    await controls.getByRole('button', { name: 'Save settings' }).click();
+    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    assert.equal(await worker.evaluate(() => settings.minConfidence), 0.3);
+    await page.bringToFront();
+    await controls.evaluate(() => document.getElementById('answerNow').click());
+    await finished(page);
+    await controls.waitForFunction(() => document.getElementById('answer').textContent === '4');
+    await page.evaluate(() => { document.querySelector('h1').textContent = 'What is 3 + 3?'; document.querySelectorAll('.option')[1].textContent = '6'; });
+    await start(page, controls);
+    await finished(page);
+    const reopened = await popup();
+    try {
+      await page.bringToFront();
+      await reopened.waitForFunction(() => document.getElementById('answer').textContent === '6');
+      assert.equal(await reopened.locator('.latest-answer strong').count(), 1);
+      await reopened.screenshot({ path: path.resolve(__dirname, '../test-results/popup.png'), fullPage: true });
+    } finally { await reopened.close(); }
+  });
 });
-async function controlsFor(page) {
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  await popup.waitForFunction(() => !document.getElementById('answerNow').disabled);
-  await page.bringToFront();
-  return popup;
-}
-test('Answer handles exactly the current screen while Autopilot stays off', async () => {
-  await configure({ enabled: false, provider: 'openrouter' }, { body: { ...payload(), model: 'typesafe/jev-1.14-20261014' } });
-  const page = await open();
-  const popup = await controlsFor(page);
+
+test('ungranted and restricted pages fail cleanly; page contexts cannot access settings or start inference', async () => {
+  await configure();
+  const page = await open(fixture, 'https://ungranted.example', false);
+  const controls = await popup();
   try {
-    assert.equal(await popup.locator('#settingsPanel').getAttribute('open'), null);
-    assert.equal(await popup.locator('#autopilot').getAttribute('aria-pressed'), 'false');
-    await page.waitForTimeout(100);
+    await start(page, controls);
+    assert.match((await finished(page)).text, /Cannot access this page/);
     assert.equal((await calls()).length, 0);
-    await popup.evaluate(() => document.getElementById('answerNow').click());
-    await status(page, () => submissions === 1);
-    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-    assert.equal(await worker.evaluate(() => settings.enabled), false);
-    await page.evaluate(() => {
-      document.querySelector('h1').textContent = 'What is 3 + 3?';
-      document.querySelectorAll('[data-testid="answer-option"]')[1].textContent = '6';
-      document.querySelector('main').setAttribute('data-slide-id', 'two');
-    });
-    await page.waitForTimeout(600);
-    assert.equal((await calls()).length, 1);
-    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-  } finally { await popup.close(); await page.close(); }
-});
-test('manual answers are discarded when the screen changes during inference', async () => {
-  await configure({ enabled: false }, { delay: 300 });
-  const page = await open();
-  const popup = await controlsFor(page);
-  try {
-    await popup.evaluate(() => document.getElementById('answerNow').click());
-    while (!(await calls()).length) await page.waitForTimeout(10);
-    await page.evaluate(() => { document.querySelector('h1').textContent = 'Different question?'; });
-    await page.waitForTimeout(650);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
-    assert.equal((await calls()).length, 1);
-  } finally { await popup.close(); await page.close(); }
-});
-test('Autopilot toggles immediately and answers new questions until stopped', async () => {
-  await configure({ enabled: false });
-  const page = await open();
-  const popup = await controlsFor(page);
-  try {
-    await popup.evaluate(() => document.getElementById('autopilot').click());
-    await status(page, () => submissions === 1);
-    assert.equal(await popup.locator('#autopilot').getAttribute('aria-pressed'), 'true');
-    assert.equal(await worker.evaluate(() => settings.enabled), true);
-    await page.evaluate(() => {
-      document.querySelector('h1').textContent = 'What is 3 + 3?';
-      document.querySelectorAll('[data-testid="answer-option"]')[1].textContent = '6';
-    });
-    await status(page, () => submissions === 2);
-    await popup.evaluate(() => document.getElementById('autopilot').click());
-    await popup.waitForFunction(() => document.getElementById('autopilot').getAttribute('aria-pressed') === 'false');
-    await page.evaluate(() => { document.querySelector('h1').textContent = 'Third question?'; });
-    await page.waitForTimeout(600);
-    assert.equal((await calls()).length, 2);
-    assert.equal(await page.evaluate(() => submissions), 2);
-    await popup.setViewportSize({ width: 380, height: 410 });
-    await popup.screenshot({ path: path.resolve(__dirname, '../test-results/simple-controls.png'), fullPage: true });
-  } finally { await popup.close(); await page.close(); }
-});
-test('Answer reports a missing question without starting inference', async () => {
-  await configure({ enabled: false });
-  const page = await open('<main><h1>Waiting for presenter</h1></main>');
-  const popup = await controlsFor(page);
-  try {
-    await popup.evaluate(() => document.getElementById('answerNow').click());
-    await popup.waitForFunction(() => document.getElementById('message').textContent.includes('No readable question'));
+    await page.goto('chrome://version');
+    const reply = await start(page, controls);
+    assert.match(reply.ok ? (await finished(page)).text : reply.error, /regular webpage|Cannot access/);
     assert.equal((await calls()).length, 0);
-  } finally { await popup.close(); await page.close(); }
-});
-test('Last chosen answer keeps only the latest selection and survives reopening the popup', async () => {
-  await configure({ enabled: false });
-  const page = await open();
-  let popup = await controlsFor(page);
-  try {
-    await popup.evaluate(() => document.getElementById('answerNow').click());
-    await status(page, () => submissions === 1);
-    await popup.waitForFunction(() => document.getElementById('answer').textContent === '4');
-    await page.evaluate(() => {
-      document.querySelector('h1').textContent = 'What is 3 + 3?';
-      document.querySelectorAll('[data-testid="answer-option"]')[1].textContent = '6';
-      document.querySelector('main').setAttribute('data-slide-id', 'two');
-    });
-    await page.waitForTimeout(600);
-    assert.equal(await popup.locator('#answer').textContent(), '4');
-    await popup.evaluate(() => document.getElementById('answerNow').click());
-    await status(page, () => submissions === 2);
-    await popup.waitForFunction(() => document.getElementById('answer').textContent === '6');
-    await popup.close();
-    popup = await controlsFor(page);
-    await popup.waitForFunction(() => document.getElementById('answer').textContent === '6');
-    assert.equal(await popup.locator('.latest-answer strong').count(), 1);
-    assert.equal(await popup.locator('.latest-answer').textContent(), 'Last chosen answer6');
-    await popup.setViewportSize({ width: 380, height: 480 });
-    await popup.screenshot({ path: path.resolve(__dirname, '../test-results/simple-controls-latest-answer.png'), fullPage: true });
-  } finally { await popup.close(); await page.close(); }
+  } finally { await controls.close(); await page.close(); }
+  await scenario(fixture, async (page) => {
+    const id = await tabId(page);
+    const [result] = await worker.evaluate(id => chrome.scripting.executeScript({ target: { tabId: id }, func: async () => {
+      const denied = [];
+      for (const type of ['inspect', 'answer']) {
+        try { denied.push(await chrome.runtime.sendMessage({ type }) === undefined); }
+        catch { denied.push(true); }
+      }
+      try { await chrome.storage.local.get('settings'); denied.push(false); } catch { denied.push(true); }
+      return denied;
+    } }), id);
+    assert.deepEqual(result.result, [true, true, true]);
+    assert.equal((await calls()).length, 0);
+  });
 });
