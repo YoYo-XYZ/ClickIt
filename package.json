@@ -1,6 +1,6 @@
 {
   "name": "clickit",
-  "version": "2.1.1",
+  "version": "2.2.1",
   "private": true,
   "description": "One-time text quiz answer selection using Jev 1.14",
   "scripts": {

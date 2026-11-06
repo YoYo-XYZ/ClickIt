@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ClickIt",
-  "version": "2.1.1",
+  "version": "2.2.1",
   "description": "Choose one answer to a visible text quiz question, then stop.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["https://api.typesafe.ai/*", "https://openrouter.ai/*"],

@@ -418,7 +418,7 @@ test('Vision reads a real screenshot where Text detection fails, makes one click
     assert.ok(png.readUInt32BE(20) >= 280 && png.readUInt32BE(20) <= 1568);
     assert.equal(request.body.questions.ready.type, 'noul');
     assert.equal(request.body.questions.target.type, 'box');
-    assert.equal(await worker.evaluate(() => captures.length), 2);
+    assert.equal(await worker.evaluate(() => captures.length), 1);
     const reopened = await popup();
     try {
       assert.equal(await reopened.locator('#mode').inputValue(), 'vision');
@@ -468,9 +468,10 @@ test('Vision ignores a countdown outside the question and answer regions', async
   });
 });
 
-test('Vision allows unrelated stylesheet and page-attribute updates during inference', async () => {
+test('Vision allows cosmetic stylesheet and page-attribute updates during inference', async () => {
   const changes = [
     () => { document.querySelector('style').textContent += '\n#timer { color: red; }'; },
+    () => { document.querySelector('style').textContent += '\n#question { color: red; } #choices button:hover { background: yellow; }'; },
     () => { document.body.setAttribute('data-countdown', '19'); }
   ];
   for (const change of changes) {
@@ -493,7 +494,6 @@ test('Vision cancels changed questions, choices, target controls, scrolling, res
     page => page.evaluate(() => { document.getElementById('option1').textContent = 'Different'; }),
     page => page.evaluate(() => { const node = document.getElementById('option4'); node.replaceWith(node.cloneNode(true)); }),
     page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
-    page => page.evaluate(() => { document.querySelector('style').textContent += '\n#question { color: red; }'; }),
     page => page.evaluate(() => scrollTo(0, 100)),
     page => page.setViewportSize({ width: 1300, height: 740 }),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
@@ -514,7 +514,7 @@ test('Vision cancels changed questions, choices, target controls, scrolling, res
   }
 });
 
-test('Vision detects changed canvas question pixels and rejects a stale answer', async () => {
+test('Vision allows canvas pixel changes during inference and takes only one screenshot', async () => {
   await configure({ mode: 'vision' }, { delay: 200 });
   const html = visionFixture.replace('<div id="question">What is 2 + 2?</div>', '<canvas id="question" width="600" height="120"></canvas>') +
     '<script>const drawing=document.getElementById("question").getContext("2d");drawing.font="28px Arial";drawing.fillText("What is 2 + 2?",0,40);</script>';
@@ -523,8 +523,10 @@ test('Vision detects changed canvas question pixels and rejects a stale answer',
     await start(page, controls);
     await until(async () => (await calls()).length === 1);
     await page.evaluate(() => { const drawing = document.getElementById('question').getContext('2d'); drawing.fillRect(0, 0, 600, 120); });
-    assert.match((await finished(page)).text, /question or answers changed/);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
+    assert.equal((await finished(page)).answer, '4');
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    assert.equal(await worker.evaluate(() => captures.length), 1);
+    assert.equal(await page.evaluate(() => submissions), 0);
   });
 });
 
@@ -569,20 +571,123 @@ test('Vision accepts real-provider confidence and rounded boxes when the target 
   });
 });
 
-test('Vision rejects submission buttons and coordinates without a supported answer control', async () => {
-  for (const submit of [false, true]) {
+const customVisionFixture = visionFixture.replace(/<button id="(option\d)">(\d)<\/button>/g,
+  '<div id="$1" style="display:grid;place-items:center">$2</div>').replace('button{', '#choices>div,button{');
+const highlight = page => page.locator('[data-clickit-highlight]');
+
+test('Vision highlights unsupported answers, keeps targeting accurate, and passes a manual click through', async () => {
+  await configure({ mode: 'vision' });
+  await scenario(customVisionFixture, async (page, controls) => {
+    await mockVision(page);
+    await start(page, controls);
+    assert.match((await finished(page)).text, /Click the highlighted answer manually/);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+    assert.equal(await page.evaluate(() => submissions), 0);
+    assert.equal((await calls()).length, 1);
+    assert.equal(await worker.evaluate(() => captures.length), 1);
+    const target = await page.locator('#option4').boundingBox();
+    const area = await highlight(page).locator('.area').boundingBox();
+    for (const key of ['x', 'y', 'width', 'height']) assert.ok(Math.abs(area[key] - target[key]) < 1, `${key}: ${area[key]} vs ${target[key]}`);
+    const marker = await highlight(page).locator('.marker').boundingBox();
+    assert.ok(Math.abs(marker.x + marker.width / 2 - target.x - target.width / 2) < 1);
+    assert.ok(Math.abs(marker.y + marker.height / 2 - target.y - target.height / 2) < 1);
+    await page.screenshot({ path: path.resolve(__dirname, '../test-results/vision-highlight.png') });
+    await page.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    assert.equal(await page.evaluate(() => submissions), 0);
+    assert.equal(await highlight(page).count(), 0);
+    assert.equal((await calls()).length, 1);
+  });
+});
+
+test('Vision suggestions disappear on question changes, styles, scrolling, resizing, navigation, keys, tab switches, and the next run', async () => {
+  const changes = [
+    page => page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; }),
+    page => page.evaluate(() => { document.getElementById('option4').style.transform = 'translateX(10px)'; }),
+    page => page.evaluate(() => scrollTo(0, 50)),
+    page => page.setViewportSize({ width: 1300, height: 740 }),
+    page => page.evaluate(() => history.pushState({}, '', '/another-question')),
+    page => page.keyboard.press('Escape'),
+    async () => { const other = await context.newPage(); try { await other.bringToFront(); await delay(100); } finally { await other.close(); } },
+    async (page, controls) => {
+      await worker.evaluate(() => { mock.delay = 200; });
+      await start(page, controls);
+      await until(async () => (await calls()).length === 2);
+      assert.equal(await highlight(page).count(), 0);
+      await finished(page);
+      await page.keyboard.press('Escape');
+    }
+  ];
+  for (const change of changes) {
+    await configure({ mode: 'vision' });
+    await scenario(customVisionFixture, async (page, controls) => {
+      await mockVision(page);
+      await start(page, controls);
+      assert.match((await finished(page)).text, /highlighted/);
+      await change(page, controls);
+      await until(async () => await highlight(page).count() === 0);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+    });
+  }
+});
+
+test('Vision suggestions expire after eight seconds without another model request or click', async () => {
+  await configure({ mode: 'vision' });
+  await scenario(customVisionFixture, async (page, controls) => {
+    // Accelerate only the suggestion lifetime in the extension's isolated world.
+    const id = await tabId(page);
+    await worker.evaluate(async id => {
+      await chrome.scripting.executeScript({ target: { tabId: id }, func: () => {
+        const timeout = globalThis.setTimeout;
+        globalThis.setTimeout = (callback, ms, ...args) => timeout(callback, ms === 8000 ? 300 : ms, ...args);
+      } });
+    }, id);
+    await mockVision(page);
+    await start(page, controls);
+    assert.match((await finished(page)).text, /highlighted/);
+    await until(async () => await highlight(page).count() === 0);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+    assert.equal((await calls()).length, 1);
+  });
+});
+
+test('Vision does not suggest unsupported controls when confidence is low or the captured question changes', async () => {
+  for (const stale of [false, true]) {
+    await configure({ mode: 'vision', minConfidence: 0.8 }, { delay: 200 });
+    await scenario(customVisionFixture, async (page, controls) => {
+      await mockVision(page, body => {
+        if (!stale) body.answers.target.confidence = 0.5;
+        return body;
+      });
+      await start(page, controls);
+      if (stale) {
+        await until(async () => (await calls()).length === 1);
+        await page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; });
+      }
+      assert.match((await finished(page)).text, /threshold|changed/);
+      assert.equal(await highlight(page).count(), 0);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+    });
+  }
+});
+
+test('Vision rejects submission, navigation, disabled, and checkbox targets without suggesting them', async () => {
+  for (const kind of ['submit', 'navigation', 'custom-navigation', 'disabled', 'checkbox']) {
     await configure({ mode: 'vision' });
     await scenario(visionFixture, async (page, controls) => {
-      const body = await visionResponse(page, submit ? '#submit' : '#option4');
-      if (submit) body.answers.choices.box.bottom = body.answers.target.box.bottom;
-      else {
-        // The gap between the two answer columns is visibly inside the choices box.
-        body.answers.target.box.left = 335 / 1280;
-        body.answers.target.box.right = 345 / 1280;
-      }
+      await page.evaluate(kind => {
+        const option = document.getElementById('option4');
+        if (kind === 'navigation') option.textContent = 'Next';
+        if (kind === 'custom-navigation') option.outerHTML = '<div id="option4">Next</div>';
+        if (kind === 'disabled') option.disabled = true;
+        if (kind === 'checkbox') option.setAttribute('role', 'checkbox');
+      }, kind);
+      const body = await visionResponse(page, kind === 'submit' ? '#submit' : '#option4');
+      if (kind === 'submit') body.answers.choices.box.bottom = body.answers.target.box.bottom;
       await worker.evaluate(body => { mock.body = body; }, body);
       await start(page, controls);
       assert.match((await finished(page)).text, /submission|No supported/);
+      assert.equal(await highlight(page).count(), 0);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal(await page.evaluate(() => submissions), 0);
     });

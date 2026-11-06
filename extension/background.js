@@ -3,6 +3,7 @@ const C = ClickIt;
 const V = ClickItVision;
 const jobs = new Map();
 const statuses = new Map();
+const suggestions = new Map();
 let settings;
 const ready = (async () => {
   await chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' });
@@ -10,6 +11,12 @@ const ready = (async () => {
   // Drop settings from the former automatic/typed-answer modes on upgrade.
   await chrome.storage.local.set({ settings });
 })();
+
+async function clearSuggestion(tabId) {
+  const target = suggestions.get(tabId)?.target;
+  suggestions.delete(tabId);
+  if (target) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
+}
 
 async function decide(q, config, signal) {
   const provider = C.providers[config.provider];
@@ -31,7 +38,7 @@ async function decide(q, config, signal) {
 }
 
 async function run(tabId, job, config) {
-  let target;
+  let target, suggested = false;
   const vision = config.mode === 'vision';
   const pageCall = async (method, ...args) => {
     const [action] = await chrome.scripting.executeScript({
@@ -56,6 +63,7 @@ async function run(tabId, job, config) {
     if (statuses.size > 64) statuses.delete(statuses.keys().next().value);
   };
   try {
+    await clearSuggestion(tabId);
     report({ text: vision ? 'Capturing visible tab…' : 'Reading question…' });
     let snapshot;
     try {
@@ -73,24 +81,26 @@ async function run(tabId, job, config) {
     finally { clearTimeout(timeout); }
     if (job.controller.signal.aborted) throw new Error('Request cancelled.');
     if (result.confidence < config.minConfidence) throw new Error(`Skipped: answer confidence ${Math.round(result.confidence * 100)}% is below your ${Math.round(config.minConfidence * 100)}% threshold.`);
-    let clickTarget = result.index;
+    let clickTarget = result.index, targetRegion;
     if (vision) {
       clickTarget = V.point(q, result.boxes.target, snapshot.result);
+      targetRegion = V.region(q, result.boxes.target, snapshot.result);
       const regions = [result.boxes.question, result.boxes.choices, result.boxes.target];
       await pageCall('watch', clickTarget, regions.map(box => V.region(q, box, snapshot.result)));
-      report({ text: 'Checking question and answer positions…' });
-      const fresh = await V.prepare(await V.capture(tabId, job.windowId, job.controller.signal));
-      if (!V.unchanged(q, fresh, regions)) throw new Error('The question or answers changed. Press Answer again.');
       job.controller.signal.throwIfAborted();
     }
-    const action = await pageCall('click', clickTarget);
-    report({ text: action.clicked ? 'Answer clicked. Submit it yourself if needed.' : 'Answer already selected. No click needed.',
+    const action = await pageCall('click', clickTarget, targetRegion);
+    if (action.suggested) job.controller.signal.throwIfAborted();
+    suggested = action.suggested === true;
+    if (suggested) suggestions.set(tabId, { target, windowId: job.windowId });
+    report({ text: suggested ? 'Click the highlighted answer manually. No automatic click made.' :
+      action.clicked ? 'Answer clicked. Submit it yourself if needed.' : 'Answer already selected. No click needed.',
       answer: vision ? action.answer : q.options[result.index], confidence: result.confidence, apiMs: result.apiMs, totalMs: Math.round(performance.now() - started) });
   } catch (error) {
     report({ text: job.controller.signal.aborted ? job.controller.signal.reason?.message || 'Request expired or was cancelled. Press Answer to retry.' :
       error instanceof TypeError ? `Cannot reach ${C.providers[config.provider].name}. Check your connection and press Answer.` : error.message });
   } finally {
-    if (target) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
+    if (target && !suggested) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
     if (jobs.get(tabId) === job) jobs.delete(tabId);
   }
 }
@@ -124,8 +134,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   })().then(data => respond({ ok: true, data }), error => respond({ ok: false, error: error.message }));
   return true;
 });
-chrome.tabs.onRemoved.addListener(tabId => { jobs.get(tabId)?.controller.abort(); jobs.delete(tabId); statuses.delete(tabId); });
+chrome.tabs.onRemoved.addListener(tabId => { jobs.get(tabId)?.controller.abort(); jobs.delete(tabId); statuses.delete(tabId); suggestions.delete(tabId); });
 chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
+  for (const [id, suggestion] of suggestions) if (suggestion.windowId === windowId && id !== tabId) void clearSuggestion(id);
   for (const [id, job] of jobs) if (job.vision && job.windowId === windowId && id !== tabId) {
     job.controller.abort(new Error('The active tab changed. Press Answer again.'));
   }
