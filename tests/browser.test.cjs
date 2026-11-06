@@ -21,10 +21,13 @@ before(async () => {
   browserSession = await context.browser().newBrowserCDPSession();
   await worker.evaluate(() => {
     globalThis.apiCalls = [];
+    globalThis.captures = [];
     globalThis.mock = {};
+    const capture = chrome.tabs.captureVisibleTab.bind(chrome.tabs);
+    chrome.tabs.captureVisibleTab = async (...args) => { captures.push(args); return capture(...args); };
     globalThis.fetch = async (url, init) => {
       const config = { ...globalThis.mock };
-      apiCalls.push({ url, body: JSON.parse(init.body), authorization: init.headers.Authorization, credentials: init.credentials });
+      apiCalls.push({ url, body: JSON.parse(init.body), headers: init.headers, authorization: init.headers.Authorization, credentials: init.credentials });
       await new Promise((resolve, reject) => {
         if (init.signal.aborted) return reject(new DOMException('Aborted', 'AbortError'));
         const timer = setTimeout(resolve, config.delay || 0);
@@ -55,7 +58,7 @@ async function configure(overrides = {}, response = {}) {
   await until(() => worker.evaluate(() => jobs.size === 0));
   const controls = await popup();
   try {
-    await worker.evaluate(config => { globalThis.mock = config; globalThis.apiCalls = []; }, { body: payload(), ...response });
+    await worker.evaluate(config => { globalThis.mock = config; globalThis.apiCalls = []; globalThis.captures = []; }, { body: payload(), ...response });
     const reply = await controls.evaluate(settings => chrome.runtime.sendMessage({ type: 'save', settings }), {
       provider: 'typesafe', apiKey: 'fake-test-key', timeoutMs: 2500, minConfidence: 0, ...overrides
     });
@@ -102,7 +105,8 @@ test('manifest has only user-triggered page access; old settings are discarded',
   assert.deepEqual(manifest.host_permissions, ['https://api.typesafe.ai/*', 'https://openrouter.ai/*']);
   await configure({ enabled: true, answerBank: { Question: 'Answer' }, questionSelector: 'h1', settleMs: 8 });
   const saved = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
-  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'minConfidence', 'provider', 'timeoutMs']);
+  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'minConfidence', 'mode', 'provider', 'timeoutMs']);
+  assert.equal(saved.mode, 'text');
   assert.equal(saved.apiKey, 'fake-test-key');
 });
 
@@ -361,5 +365,228 @@ test('ungranted and restricted pages fail cleanly; page contexts cannot access s
     } }), id);
     assert.deepEqual(result.result, [true, true, true]);
     assert.equal((await calls()).length, 0);
+  });
+});
+
+const visionFixture = `<!doctype html><style>
+body{margin:0;min-height:1400px;background:white;color:black;font:24px Arial}
+#question{position:absolute;left:40px;top:80px;width:min(600px,calc(100vw - 80px));height:120px}
+#choices{position:absolute;left:40px;top:260px;width:min(600px,calc(100vw - 80px));height:200px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+button{font:24px Arial;background:#dae8ff;border:2px solid #314669;color:black}
+#submit{position:absolute;left:40px;top:520px;width:160px;height:60px}
+#timer{position:absolute;right:20px;top:10px}
+</style><div id="timer">20</div><div id="question">What is 2 + 2?</div>
+<div id="choices"><button id="option1">1</button><button id="option2">2</button><button id="option3">3</button><button id="option4">4</button></div><button id="submit">Submit</button>
+<script>window.clicks=[];window.submissions=0;document.addEventListener('click',e=>{if(e.target.id.startsWith('option'))clicks.push(e.target.textContent);if(e.target.id==='submit')submissions++});</script>`;
+
+async function visionResponse(page, target = '#option4') {
+  return page.evaluate(target => {
+    // Convert known fixture rectangles into the model's image coordinate system, including padding.
+    const scale = Math.min(1, 1568 / (innerWidth * devicePixelRatio), 1568 / (innerHeight * devicePixelRatio));
+    const drawnWidth = Math.round(innerWidth * devicePixelRatio * scale), drawnHeight = Math.round(innerHeight * devicePixelRatio * scale);
+    const width = Math.max(280, drawnWidth), height = Math.max(280, drawnHeight);
+    const left = Math.floor((width - drawnWidth) / 2), top = Math.floor((height - drawnHeight) / 2);
+    const box = selector => {
+      const rect = document.querySelector(selector).getBoundingClientRect();
+      return { type: 'box', confidence: 0.98, box: {
+        left: (left + rect.left / innerWidth * drawnWidth) / width, right: (left + rect.right / innerWidth * drawnWidth) / width,
+        top: (top + rect.top / innerHeight * drawnHeight) / height, bottom: (top + rect.bottom / innerHeight * drawnHeight) / height
+      } };
+    };
+    return { model: 'jev-1.14.0', answers: { ready: { type: 'noul', noul: 0.99 },
+      question: box('#question'), choices: box('#choices'), target: box(target) } };
+  }, target);
+}
+async function mockVision(page, mutate = body => body) {
+  await worker.evaluate(body => { mock.body = body; }, mutate(await visionResponse(page)));
+}
+
+test('Vision reads a real screenshot where Text detection fails, makes one click, and sends no extracted HTML', async () => {
+  await configure();
+  await scenario(visionFixture, async (page, controls) => {
+    await start(page, controls);
+    assert.match((await finished(page)).text, /unsupported/);
+    assert.equal((await calls()).length, 0);
+    await controls.locator('#mode').selectOption('vision');
+    await until(() => worker.evaluate(() => settings.mode === 'vision'));
+    await mockVision(page);
+    await start(page, controls);
+    assert.equal((await finished(page)).answer, '4');
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    assert.equal(await page.evaluate(() => submissions), 0);
+    const [request] = await calls();
+    assert.equal(request.headers['TypeSafe-Danger-Zone-Images'], 'true');
+    assert.deepEqual(Object.keys(request.body.state), ['screen']);
+    const asset = request.body.assets[request.body.state.screen];
+    assert.equal(asset.type, 'image');
+    assert.equal(asset.format, 'png');
+    const png = Buffer.from(asset.data_base64, 'base64');
+    assert.equal(png.toString('hex', 0, 8), '89504e470d0a1a0a');
+    assert.ok(png.length > 1000);
+    assert.ok(png.readUInt32BE(16) >= 280 && png.readUInt32BE(16) <= 1568);
+    assert.ok(png.readUInt32BE(20) >= 280 && png.readUInt32BE(20) <= 1568);
+    assert.equal(request.body.questions.ready.type, 'noul');
+    assert.equal(request.body.questions.target.type, 'box');
+    assert.equal(await worker.evaluate(() => captures.length), 2);
+    const reopened = await popup();
+    try {
+      assert.equal(await reopened.locator('#mode').inputValue(), 'vision');
+      assert.match(await reopened.locator('#modeHint').textContent(), /screenshot/);
+      await reopened.screenshot({ path: path.resolve(__dirname, '../test-results/vision-popup.png'), fullPage: true });
+    } finally { await reopened.close(); }
+    await page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; });
+    await delay(100);
+    assert.equal((await calls()).length, 1);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+  });
+});
+
+test('Vision maps resized, padded, and high-DPI screenshots to the correct page coordinates', async () => {
+  const sizes = [{ width: 2200, height: 1200 }, { width: 240, height: 720 }, { width: 1000, height: 700, dpi: 2 }];
+  for (const size of sizes) {
+    await configure({ mode: 'vision' });
+    await scenario(visionFixture, async (page, controls) => {
+      await page.setViewportSize({ width: size.width, height: size.height });
+      if (size.dpi) {
+        const session = await context.newCDPSession(page);
+        await session.send('Emulation.setDeviceMetricsOverride', { width: size.width, height: size.height, deviceScaleFactor: size.dpi, mobile: false });
+      }
+      await mockVision(page);
+      await start(page, controls);
+      const result = await finished(page);
+      assert.equal(result.answer, '4', result.text);
+      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+      const asset = Object.values((await calls())[0].body.assets)[0];
+      const png = Buffer.from(asset.data_base64, 'base64');
+      assert.ok(png.readUInt32BE(16) >= 280 && png.readUInt32BE(16) <= 1568);
+      assert.ok(png.readUInt32BE(20) >= 280 && png.readUInt32BE(20) <= 1568);
+    });
+  }
+});
+
+test('Vision ignores a countdown outside the question and answer regions', async () => {
+  await configure({ mode: 'vision' }, { delay: 200 });
+  await scenario(visionFixture, async (page, controls) => {
+    await mockVision(page);
+    await start(page, controls);
+    await until(async () => (await calls()).length === 1);
+    await page.evaluate(() => { window.tick = setInterval(() => { document.getElementById('timer').textContent = String(Math.random()); }, 30); });
+    assert.equal((await finished(page)).answer, '4');
+    await page.evaluate(() => clearInterval(window.tick));
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+  });
+});
+
+test('Vision cancels changed questions, choices, target controls, scrolling, resizing, and navigation', async () => {
+  const changes = [
+    page => page.evaluate(() => { document.getElementById('question').textContent = 'A different question?'; }),
+    page => page.evaluate(() => { document.getElementById('option1').textContent = 'Different'; }),
+    page => page.evaluate(() => { const node = document.getElementById('option4'); node.replaceWith(node.cloneNode(true)); }),
+    page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
+    page => page.evaluate(() => scrollTo(0, 100)),
+    page => page.setViewportSize({ width: 1300, height: 740 }),
+    page => page.evaluate(() => history.pushState({}, '', '/another-question')),
+    page => page.reload()
+  ];
+  for (const change of changes) {
+    await configure({ mode: 'vision' }, { delay: 200 });
+    await scenario(visionFixture, async (page, controls) => {
+      await mockVision(page);
+      await start(page, controls);
+      await until(async () => (await calls()).length === 1);
+      await change(page);
+      const result = await finished(page);
+      assert.match(result.text, /changed|supported, enabled/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+      assert.equal((await calls()).length, 1);
+    });
+  }
+});
+
+test('Vision detects changed canvas question pixels and rejects a stale answer', async () => {
+  await configure({ mode: 'vision' }, { delay: 200 });
+  const html = visionFixture.replace('<div id="question">What is 2 + 2?</div>', '<canvas id="question" width="600" height="120"></canvas>') +
+    '<script>const drawing=document.getElementById("question").getContext("2d");drawing.font="28px Arial";drawing.fillText("What is 2 + 2?",0,40);</script>';
+  await scenario(html, async (page, controls) => {
+    await mockVision(page);
+    await start(page, controls);
+    await until(async () => (await calls()).length === 1);
+    await page.evaluate(() => { const drawing = document.getElementById('question').getContext('2d'); drawing.fillRect(0, 0, 600, 120); });
+    assert.match((await finished(page)).text, /question or answers changed/);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+  });
+});
+
+test('Vision rejects unclear, malformed, out-of-range, and low-confidence model outputs', async () => {
+  const mutations = [
+    body => { body.answers.ready.noul = 0.4; },
+    body => { delete body.answers.question; },
+    body => { body.answers.target.box.left = -0.1; },
+    body => { body.answers.target.box.left = body.answers.target.box.right; },
+    body => { body.answers.target.confidence = 0.5; },
+    body => { body.answers.choices.box.right = 0.1; },
+    body => { body.model = 'jev-1.13.0'; }
+  ];
+  for (const mutate of mutations) {
+    await configure({ mode: 'vision' });
+    await scenario(visionFixture, async (page, controls) => {
+      await mockVision(page, body => { mutate(body); return body; });
+      await start(page, controls);
+      assert.match((await finished(page)).text, /No clear|invalid|threshold|outside|did not return/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+      assert.equal(await worker.evaluate(() => captures.length), 1);
+    });
+  }
+});
+
+test('Vision rejects submission buttons and coordinates without a supported answer control', async () => {
+  for (const submit of [false, true]) {
+    await configure({ mode: 'vision' });
+    await scenario(visionFixture, async (page, controls) => {
+      const body = await visionResponse(page, submit ? '#submit' : '#option4');
+      if (submit) body.answers.choices.box.bottom = body.answers.target.box.bottom;
+      else {
+        // The gap between the two answer columns is visibly inside the choices box.
+        body.answers.target.box.left = 335 / 1280;
+        body.answers.target.box.right = 345 / 1280;
+      }
+      await worker.evaluate(body => { mock.body = body; }, body);
+      await start(page, controls);
+      assert.match((await finished(page)).text, /submission|No supported/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+      assert.equal(await page.evaluate(() => submissions), 0);
+    });
+  }
+});
+
+test('Vision switching tabs cancels the pending click and a second press cannot start another run', async () => {
+  await configure({ mode: 'vision' }, { delay: 300 });
+  await scenario(visionFixture, async (page, controls) => {
+    await mockVision(page);
+    const replies = await Promise.all([start(page, controls), start(page, controls)]);
+    assert.equal(replies.filter(reply => reply.ok).length, 1);
+    await until(async () => (await calls()).length === 1);
+    const other = await context.newPage();
+    try {
+      assert.match((await finished(page)).text, /active tab changed|viewport changed/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
+      assert.equal((await calls()).length, 1);
+    } finally { await other.close(); }
+  });
+});
+
+test('Vision supports OpenRouter without sending a key or screenshot to another provider', async () => {
+  await configure({ mode: 'vision', provider: 'openrouter' });
+  await scenario(visionFixture, async (page, controls) => {
+    await mockVision(page, body => { body.model = 'typesafe/jev-1.14-20261014'; return body; });
+    await start(page, controls);
+    const result = await finished(page);
+    assert.equal(result.answer, '4', result.text);
+    const [request] = await calls();
+    assert.equal(request.url, 'https://openrouter.ai/api/alpha/decisions');
+    assert.equal(request.body.model, 'typesafe/jev-1.14');
+    assert.equal(request.headers['TypeSafe-Danger-Zone-Images'], undefined);
+    assert.equal((await calls()).length, 1);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
   });
 });

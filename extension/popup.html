@@ -2,6 +2,8 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ClickIt</title><link rel="stylesheet" href="popup.css"></head>
 <body>
   <header><h1>ClickIt</h1><p>One question. One answer click.</p></header>
+  <label>Read question using<select id="mode" disabled><option value="text">Text</option><option value="vision">Vision · screenshot</option></select></label>
+  <p id="modeHint" class="hint"></p>
   <button id="answerNow" type="button" disabled>Answer</button>
   <p class="hint">Selects one answer, then stops. Submit it yourself if needed.</p>
   <section class="latest-answer"><span>Last chosen answer</span><strong id="answer" aria-live="polite">No answer yet</strong></section>
@@ -11,7 +13,7 @@
     <form id="settings">
       <label>API provider<select id="provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select></label>
       <label><span id="keyLabel">TypeSafe API key</span><input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"></label>
-      <p class="hint">Your key stays in this browser profile. Only the detected question and choices go to your provider.</p>
+      <p class="hint">Your key stays in this browser profile. Text mode sends the question and choices; Vision mode sends a screenshot of the visible tab.</p>
       <div class="row"><label>Minimum confidence<input id="minConfidence" type="number" min="0" max="1" step="0.05"></label><label>API deadline, ms<input id="timeoutMs" type="number" min="200" max="15000" step="100"></label></div>
       <button type="submit" id="saveSettings">Save settings</button>
     </form>

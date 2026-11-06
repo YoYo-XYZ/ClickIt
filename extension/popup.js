@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 let loaded = false, sending = false, running = false;
+let saved;
 async function send(message) {
   const reply = await chrome.runtime.sendMessage(message);
   if (!reply?.ok) throw new Error(reply?.error || 'Extension unavailable.');
@@ -9,9 +10,15 @@ function controls() {
   $('answerNow').disabled = !loaded || sending || running;
   $('answerNow').textContent = running ? 'Answering…' : 'Answer';
   $('saveSettings').disabled = !loaded || sending || running;
+  $('mode').disabled = !loaded || sending || running;
 }
 function showProvider() {
   $('keyLabel').textContent = `${ClickIt.providers[$('provider').value].name} API key`;
+}
+function showMode() {
+  $('modeHint').textContent = $('mode').value === 'vision'
+    ? 'Sends the visible tab screenshot to your provider. Keep the full question and choices visible. Vision is experimental.'
+    : 'Reads question text and answer controls from the page.';
 }
 async function refresh(initial = false) {
   try {
@@ -22,20 +29,33 @@ async function refresh(initial = false) {
     $('answer').textContent = action?.answer || 'No answer yet';
     $('timing').textContent = action ? `${action.totalMs} ms · ${action.apiMs} ms API` : '';
     if (initial) {
+      saved = data.settings;
       for (const key of Object.keys(ClickIt.defaults)) $(key).value = data.settings[key];
       loaded = true;
       showProvider();
+      showMode();
     }
     controls();
   } catch (error) { $('message').textContent = error.message; }
 }
 $('provider').addEventListener('change', showProvider);
+$('mode').addEventListener('change', async () => {
+  sending = true; controls(); showMode();
+  try {
+    const next = { ...saved, mode: $('mode').value };
+    await send({ type: 'save', settings: next });
+    saved = next;
+    $('message').textContent = '';
+  } catch (error) { $('mode').value = saved.mode; showMode(); $('message').textContent = error.message; }
+  finally { sending = false; controls(); }
+});
 $('settings').addEventListener('submit', async event => {
   event.preventDefault();
   sending = true; controls();
   try {
     const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, $(key).value])));
     await send({ type: 'save', settings });
+    saved = settings;
     $('apiKey').value = settings.apiKey;
     $('message').textContent = 'Saved.';
     $('settingsPanel').open = false;
