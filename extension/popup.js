@@ -8,13 +8,40 @@ async function send(message) {
 }
 function controls() {
   $('answerNow').disabled = !loaded || sending || running;
-  $('answerNow').textContent = running ? 'Answering…' : 'Answer';
+  const label = running ? 'Answering…' : 'Answer';
+  $('answerLabel').textContent = label;
+  $('answerNow').setAttribute('aria-label', label);
+  $('answerNow').setAttribute('aria-busy', String(running));
   $('saveSettings').disabled = !loaded || sending || running;
   $('mode').disabled = !loaded || sending || running;
+  $('resetPrompt').disabled = !loaded || sending || running;
 }
 function showProvider() {
   $('keyLabel').textContent = `${ClickIt.providers[$('provider').value].name} API key`;
 }
+function showPrompt() {
+  const vision = $('mode').value === 'vision';
+  $('textPrompt').hidden = vision;
+  $('visionPrompt').hidden = !vision;
+  $('promptLabel').textContent = vision ? 'Vision prompt' : 'Text prompt';
+  $('promptLabel').htmlFor = vision ? 'visionPrompt' : 'textPrompt';
+}
+$('resetPrompt').addEventListener('click', () => {
+  const key = `${$('mode').value}Prompt`;
+  $(key).value = ClickIt.defaults[key];
+});
+function showSettings(open) {
+  $('settingsPanel').hidden = !open;
+  $('settingsToggle').setAttribute('aria-expanded', String(open));
+}
+$('settingsToggle').addEventListener('click', () => showSettings($('settingsPanel').hidden));
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !$('settingsPanel').hidden) {
+    event.preventDefault();
+    showSettings(false);
+    $('settingsToggle').focus();
+  }
+});
 async function refresh(initial = false) {
   try {
     const data = await send({ type: 'inspect' });
@@ -28,6 +55,7 @@ async function refresh(initial = false) {
       for (const key of Object.keys(ClickIt.defaults)) $(key).value = data.settings[key];
       loaded = true;
       showProvider();
+      showPrompt();
     }
     controls();
   } catch (error) { $('message').textContent = error.message; }
@@ -42,6 +70,7 @@ $('mode').addEventListener('change', async () => {
     $('message').textContent = '';
   } catch (error) { $('mode').value = saved.mode; $('message').textContent = error.message; }
   finally { sending = false; controls(); }
+  showPrompt();
 });
 $('settings').addEventListener('submit', async event => {
   event.preventDefault();
@@ -52,7 +81,7 @@ $('settings').addEventListener('submit', async event => {
     saved = settings;
     $('apiKey').value = settings.apiKey;
     $('message').textContent = 'Saved.';
-    $('settingsPanel').open = false;
+    showSettings(false);
   } catch (error) { $('message').textContent = error.message; }
   finally { sending = false; controls(); }
 });
@@ -65,7 +94,7 @@ $('answerNow').addEventListener('click', async () => {
     await refresh();
   } catch (error) {
     $('message').textContent = error.message;
-    if (error.message.includes('API key')) { $('settingsPanel').open = true; $('apiKey').focus(); }
+    if (error.message.includes('API key')) { showSettings(true); $('apiKey').focus(); }
   } finally { sending = false; controls(); }
 });
 void refresh(true);

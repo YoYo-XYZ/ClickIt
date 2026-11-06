@@ -10,7 +10,9 @@ ClickIt selects one answer to a visible single-choice text quiz question using J
 4. Choose **TypeSafe** or **OpenRouter**, paste a key from that provider, and save.
 5. Choose **Text** or **Vision** above the Answer button, then press **Answer**. Submit manually if the quiz requires it.
 
-Reload the extension after updating its files. Version 2.2.2 simplifies the popup. Existing installations keep their API settings. Automatic answering, typed answers, answer banks, and selector overrides remain removed.
+Reload the extension after updating its files. Version 2.4.0 adds editable answer prompts in Settings. Existing installations keep their API settings. Automatic answering, typed answers, answer banks, and selector overrides remain removed.
+
+Choose Text or Vision, open the Settings gear, and edit that mode's prompt. Save settings to apply it, or use Reset to restore the default before saving. Each mode keeps its own prompt, shared across providers. Text uses it to choose an option; Vision uses it to locate the chosen answer button. Vision's visibility and region-detection instructions and the required response formats remain fixed. Prompts must contain 1–6,000 characters.
 
 ## Vision mode
 

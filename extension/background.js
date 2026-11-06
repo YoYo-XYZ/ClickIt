@@ -25,7 +25,7 @@ async function decide(q, config, signal) {
   const response = await fetch(provider.endpoint, {
     method: 'POST', headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json',
       ...(vision && config.provider === 'typesafe' ? { 'TypeSafe-Danger-Zone-Images': 'true' } : {}) },
-    body: JSON.stringify(vision ? C.visionRequest(q.data, config.provider) : C.requestBody(q, config.provider)), signal, credentials: 'omit'
+    body: JSON.stringify(vision ? C.visionRequest(q.data, config.provider, config.visionPrompt) : C.requestBody(q, config.provider, config.textPrompt)), signal, credentials: 'omit'
   });
   if (!response.ok) {
     if (response.status === 401) throw new Error(`${provider.name} rejected the API key (HTTP 401). Select the provider that issued your key and save its key in Settings.`);

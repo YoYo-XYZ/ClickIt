@@ -105,7 +105,7 @@ test('manifest has only user-triggered page access; old settings are discarded',
   assert.deepEqual(manifest.host_permissions, ['https://api.typesafe.ai/*', 'https://openrouter.ai/*']);
   await configure({ enabled: true, answerBank: { Question: 'Answer' }, questionSelector: 'h1', settleMs: 8 });
   const saved = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
-  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'minConfidence', 'mode', 'provider', 'timeoutMs']);
+  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'minConfidence', 'mode', 'provider', 'textPrompt', 'timeoutMs', 'visionPrompt']);
   assert.equal(saved.mode, 'text');
   assert.equal(saved.apiKey, 'fake-test-key');
 });
@@ -316,11 +316,16 @@ test('authentication errors do not echo provider response bodies or secrets', as
 test('popup saves lean settings, shows only the latest answer, and keeps it on reopening', async () => {
   await configure();
   await scenario(fixture, async (page, controls) => {
-    assert.equal(await controls.locator('#autopilot,#answerBank,textarea').count(), 0);
-    await controls.getByText('Settings', { exact: true }).click();
+    assert.equal(await controls.locator('#autopilot,#answerBank').count(), 0);
+    await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+    assert.equal(await controls.locator('#settingsToggle').getAttribute('aria-expanded'), 'true');
+    assert.equal(await controls.locator('#answerNow').isVisible(), false);
+    await controls.screenshot({ path: path.resolve(__dirname, '../test-results/popup-settings.png'), fullPage: true });
     await controls.locator('#minConfidence').fill('0.3');
     await controls.getByRole('button', { name: 'Save settings' }).click();
     await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    assert.equal(await controls.locator('#settingsPanel').isVisible(), false);
+    assert.equal(await controls.locator('#answerNow').isVisible(), true);
     assert.equal(await worker.evaluate(() => settings.minConfidence), 0.3);
     await page.bringToFront();
     await controls.evaluate(() => document.getElementById('answerNow').click());
@@ -724,4 +729,69 @@ test('Vision supports OpenRouter without sending a key or screenshot to another 
     assert.equal((await calls()).length, 1);
     assert.deepEqual(await page.evaluate(() => clicks), ['4']);
   });
+});
+
+test('saved multiline prompts reach the answer instructions in both modes and providers', async () => {
+  const textPrompt = 'Read state.question carefully.\nChoose the best supplied option.';
+  const visionPrompt = 'Read the visible quiz.\nBound the answer button with the best answer.';
+  for (const provider of ['typesafe', 'openrouter']) for (const mode of ['text', 'vision']) {
+    await configure({ provider, mode });
+    await scenario(mode === 'vision' ? visionFixture : fixture, async (page, controls) => {
+      await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+      const key = `${mode}Prompt`, prompt = mode === 'text' ? textPrompt : visionPrompt;
+      await controls.locator(`#${key}`).fill(prompt);
+      await controls.getByRole('button', { name: 'Save settings' }).click();
+      await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+      const reopened = await popup();
+      try { assert.equal(await reopened.locator(`#${key}`).inputValue(), prompt); }
+      finally { await reopened.close(); }
+      if (mode === 'vision') await mockVision(page, body => {
+        if (provider === 'openrouter') body.model = 'typesafe/jev-1.14';
+        return body;
+      });
+      else if (provider === 'openrouter') await worker.evaluate(() => { mock.body.model = 'typesafe/jev-1.14'; });
+      await start(page, controls);
+      assert.equal((await finished(page)).answer, '4');
+      const request = (await calls())[0].body;
+      const answer = mode === 'vision' ? request.questions.target : request.questions.answer;
+      assert.equal(answer.instructions, prompt);
+      assert.equal(answer.type, mode === 'vision' ? 'box' : 'choice');
+      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    });
+  }
+});
+
+test('Reset restores only the selected mode prompt and persists after Save', async () => {
+  for (const mode of ['text', 'vision']) {
+    await configure({ mode, textPrompt: 'Custom text prompt', visionPrompt: 'Custom vision prompt' });
+    const controls = await popup();
+    try {
+      await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+      const key = `${mode}Prompt`, other = mode === 'text' ? 'visionPrompt' : 'textPrompt';
+      await controls.getByRole('button', { name: 'Reset', exact: true }).click();
+      const expected = await worker.evaluate(key => C.defaults[key], key);
+      assert.equal(await controls.locator(`#${key}`).inputValue(), expected);
+      assert.match(await controls.locator(`#${other}`).inputValue(), /^Custom /);
+      await controls.screenshot({ path: path.resolve(__dirname, `../test-results/popup-${mode}-prompt.png`), fullPage: true });
+      await controls.getByRole('button', { name: 'Save settings' }).click();
+      await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+      assert.equal(await worker.evaluate(key => settings[key], key), expected);
+    } finally { await controls.close(); }
+  }
+});
+
+test('blank, oversized, and non-text prompts are rejected without overwriting saved prompts', async () => {
+  await configure({ textPrompt: 'Saved text', visionPrompt: 'Saved vision' });
+  const controls = await popup();
+  try {
+    for (const key of ['textPrompt', 'visionPrompt']) for (const value of [' \n ', 'x'.repeat(6001), null]) {
+      const result = await controls.evaluate(async ({ key, value }) => {
+        const { data } = await chrome.runtime.sendMessage({ type: 'inspect' });
+        return chrome.runtime.sendMessage({ type: 'save', settings: { ...data.settings, [key]: value } });
+      }, { key, value });
+      assert.equal(result.ok, false);
+      assert.match(result.error, /Prompts/);
+    }
+    assert.deepEqual(await worker.evaluate(() => [settings.textPrompt, settings.visionPrompt]), ['Saved text', 'Saved vision']);
+  } finally { await controls.close(); }
 });
