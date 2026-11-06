@@ -368,16 +368,7 @@ test('ungranted and restricted pages fail cleanly; page contexts cannot access s
   });
 });
 
-const visionFixture = `<!doctype html><style>
-body{margin:0;min-height:1400px;background:white;color:black;font:24px Arial}
-#question{position:absolute;left:40px;top:80px;width:min(600px,calc(100vw - 80px));height:120px}
-#choices{position:absolute;left:40px;top:260px;width:min(600px,calc(100vw - 80px));height:200px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
-button{font:24px Arial;background:#dae8ff;border:2px solid #314669;color:black}
-#submit{position:absolute;left:40px;top:520px;width:160px;height:60px}
-#timer{position:absolute;right:20px;top:10px}
-</style><div id="timer">20</div><div id="question">What is 2 + 2?</div>
-<div id="choices"><button id="option1">1</button><button id="option2">2</button><button id="option3">3</button><button id="option4">4</button></div><button id="submit">Submit</button>
-<script>window.clicks=[];window.submissions=0;document.addEventListener('click',e=>{if(e.target.id.startsWith('option'))clicks.push(e.target.textContent);if(e.target.id==='submit')submissions++});</script>`;
+const visionFixture = require('./fixtures/vision.cjs');
 
 async function visionResponse(page, target = '#option4') {
   return page.evaluate(target => {
@@ -477,12 +468,32 @@ test('Vision ignores a countdown outside the question and answer regions', async
   });
 });
 
+test('Vision allows unrelated stylesheet and page-attribute updates during inference', async () => {
+  const changes = [
+    () => { document.querySelector('style').textContent += '\n#timer { color: red; }'; },
+    () => { document.body.setAttribute('data-countdown', '19'); }
+  ];
+  for (const change of changes) {
+    await configure({ mode: 'vision' }, { delay: 200 });
+    await scenario(visionFixture, async (page, controls) => {
+      await mockVision(page);
+      await start(page, controls);
+      await until(async () => (await calls()).length === 1);
+      await page.evaluate(change);
+      const result = await finished(page);
+      assert.equal(result.answer, '4', result.text);
+      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    });
+  }
+});
+
 test('Vision cancels changed questions, choices, target controls, scrolling, resizing, and navigation', async () => {
   const changes = [
     page => page.evaluate(() => { document.getElementById('question').textContent = 'A different question?'; }),
     page => page.evaluate(() => { document.getElementById('option1').textContent = 'Different'; }),
     page => page.evaluate(() => { const node = document.getElementById('option4'); node.replaceWith(node.cloneNode(true)); }),
     page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
+    page => page.evaluate(() => { document.querySelector('style').textContent += '\n#question { color: red; }'; }),
     page => page.evaluate(() => scrollTo(0, 100)),
     page => page.setViewportSize({ width: 1300, height: 740 }),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
@@ -528,15 +539,34 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
     body => { body.model = 'jev-1.13.0'; }
   ];
   for (const mutate of mutations) {
-    await configure({ mode: 'vision' });
+    await configure({ mode: 'vision', minConfidence: 0.8 });
     await scenario(visionFixture, async (page, controls) => {
       await mockVision(page, body => { mutate(body); return body; });
       await start(page, controls);
-      assert.match((await finished(page)).text, /No clear|invalid|threshold|outside|did not return/);
+      assert.match((await finished(page)).text, /visibility|invalid|threshold|outside|did not return/);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal(await worker.evaluate(() => captures.length), 1);
     });
   }
+});
+
+test('Vision accepts real-provider confidence and rounded boxes when the target center hits the answer', async () => {
+  await configure({ mode: 'vision' });
+  await scenario(visionFixture, async (page, controls) => {
+    await mockVision(page, body => {
+      body.answers.ready.noul = 0.8;
+      body.answers.choices.confidence = 0.5;
+      body.answers.target.confidence = 0.64;
+      body.answers.choices.box.bottom = body.answers.target.box.bottom - 0.02;
+      return body;
+    });
+    await start(page, controls);
+    const result = await finished(page);
+    assert.equal(result.answer, '4', result.text);
+    assert.equal(result.confidence, 0.64);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    assert.equal(await page.evaluate(() => submissions), 0);
+  });
 });
 
 test('Vision rejects submission buttons and coordinates without a supported answer control', async () => {

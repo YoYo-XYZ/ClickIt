@@ -86,15 +86,27 @@
     };
     const candidates = new Map([...document.querySelectorAll(selector)].map(node => [node, describe(node)]));
     let invalid = document.visibilityState !== 'visible';
-    let regions, changed = [];
+    let regions, appearance, changed = [];
     const invalidate = () => { invalid = true; };
     const intersects = rect => regions.some(region => rect.left < region.x + region.width && rect.right > region.x &&
       rect.top < region.y + region.height && rect.bottom > region.y);
+    const regionAppearance = () => JSON.stringify([...document.querySelectorAll('body,body *')].flatMap(node => {
+      const rect = node.getBoundingClientRect();
+      if (!intersects(rect)) return [];
+      const style = getComputedStyle(node);
+      return [[rect.x, rect.y, rect.width, rect.height,
+        [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE).map(child => child.textContent).join(''),
+        style.display, style.visibility, style.opacity, style.color, style.backgroundColor,
+        style.font, style.letterSpacing, style.transform, style.filter, style.border, style.boxShadow]];
+    }));
     const observer = new MutationObserver(records => {
       for (const record of records) {
         const node = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
         if (!node) continue;
-        if (['data-question-id', 'data-slide-id'].includes(record.attributeName) || node.closest('style')) invalidate();
+        if (['data-question-id', 'data-slide-id'].includes(record.attributeName)) invalidate();
+        // Styles and container attributes can update for unrelated widgets. Their actual
+        // effect on the watched regions is checked visually, rather than rejecting every mutation.
+        if (node.closest('style,script') || record.type === 'attributes') continue;
         const rect = node.getBoundingClientRect();
         if (regions ? intersects(rect) : changed.length >= 1000) invalidate();
         else if (!regions) changed.push(rect);
@@ -107,7 +119,8 @@
     document.addEventListener('visibilitychange', visibility);
 
     function check(point) {
-      if (invalid || geometry() !== original || location.href !== url) throw new Error('The page or viewport changed. Press Answer again.');
+      if (invalid || geometry() !== original || location.href !== url ||
+        (appearance && regionAppearance() !== appearance)) throw new Error('The page or viewport changed. Press Answer again.');
       let node = document.elementFromPoint(point.x, point.y)?.closest(selector);
       if (node?.matches('label')) node = node.control;
       if (!node || !candidates.has(node) || node.matches('input:not([type="radio"])') ||
@@ -128,6 +141,7 @@
         if (changed.some(intersects)) invalidate();
         changed = [];
         check(point);
+        appearance = regionAppearance();
         return true;
       },
       click(point) {

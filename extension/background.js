@@ -72,11 +72,11 @@ async function run(tabId, job, config) {
     try { result = await decide(q, config, job.controller.signal); }
     finally { clearTimeout(timeout); }
     if (job.controller.signal.aborted) throw new Error('Request cancelled.');
-    if (result.confidence < Math.max(config.minConfidence, vision ? 0.8 : 0)) throw new Error('Skipped: confidence below your threshold.');
+    if (result.confidence < config.minConfidence) throw new Error(`Skipped: answer confidence ${Math.round(result.confidence * 100)}% is below your ${Math.round(config.minConfidence * 100)}% threshold.`);
     let clickTarget = result.index;
     if (vision) {
       clickTarget = V.point(q, result.boxes.target, snapshot.result);
-      const regions = [result.boxes.question, result.boxes.choices];
+      const regions = [result.boxes.question, result.boxes.choices, result.boxes.target];
       await pageCall('watch', clickTarget, regions.map(box => V.region(q, box, snapshot.result)));
       report({ text: 'Checking question and answer positions…' });
       const fresh = await V.prepare(await V.capture(tabId, job.windowId, job.controller.signal));

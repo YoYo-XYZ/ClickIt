@@ -10,7 +10,7 @@ ClickIt selects one answer to a visible single-choice text quiz question using J
 4. Choose **TypeSafe** or **OpenRouter**, paste a key from that provider, and save.
 5. Choose **Text** or **Vision** above the Answer button, then press **Answer**. Submit manually if the quiz requires it.
 
-Reload the extension after updating its files. Version 2.1 adds Vision mode. Existing installations keep their API settings and start in Text mode. Automatic answering, typed answers, answer banks, and selector overrides remain removed.
+Reload the extension after updating its files. Version 2.1.1 fixes Vision mode's overly strict recognition and region checks. Existing installations keep their API settings. Automatic answering, typed answers, answer banks, and selector overrides remain removed.
 
 ## Vision mode
 
@@ -18,13 +18,13 @@ Choose **Vision · screenshot** when Text mode misses a question that you can re
 
 Keep the complete question and all answer choices visible. On Kahoot, Vision can help when the question is displayed in your participant tab but Text detection fails. If your tab shows only colored shapes and the question is on another display, that screenshot does not contain enough information to answer.
 
-Vision asks whether one clear single-choice question can be answered and requests the question, choices, and correct answer button regions. It requires at least 0.9 for the answerability decision and 0.8 confidence for each region, or your higher configured threshold. These are initial application thresholds, not measured accuracy guarantees. TypeSafe marks image input and Box output as [experimental](https://docs.typesafe.ai/images); the [OpenRouter API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request) also accepts image assets and Box questions.
+Vision checks whether a single-choice question and its choices are visible, separately from finding the correct answer. Visibility must reach 70%; when it does not, the popup shows the returned score. Your configured minimum confidence applies to the chosen answer. There is no hidden 80% confidence floor for region boxes. The answer's center must fall inside the detected choice area and hit a supported control; small differences between independently predicted box edges are allowed. TypeSafe marks image input and Box output as [experimental](https://docs.typesafe.ai/images); the [OpenRouter API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request) also accepts image assets and Box questions.
 
-Before clicking, ClickIt captures the tab again and checks the question and all answer choices for pixel changes. Countdown changes outside those regions are allowed. Scrolling, resizing, switching tabs, navigation, replaced or disabled answer controls, and changes inside the question or choices stop the action. Animated content inside the question can also stop it. Screenshot captures are spaced to respect Chrome's capture rate limit.
+Before clicking, ClickIt captures the tab again and checks the question, choices, and target for pixel changes. Countdown and stylesheet changes that do not affect those regions are allowed. Scrolling, resizing, switching tabs, navigation, replaced or disabled answer controls, and changes inside the question or choices stop the action. Animated content inside the question can also stop it. Screenshot captures are spaced to respect Chrome's capture rate limit.
 
 The screenshot is resized to fit the model's image limits, with padding for narrow viewports. Coordinates are mapped back to the page, accounting for the screenshot size and browser display scaling. ClickIt clicks only a supported button or radio control at the returned position. It never clicks Submit or navigation, and does not use debugger access or desktop mouse control.
 
-The provider receives the whole visible tab, which may include names and other personal content. Screenshots are processed in memory and are not saved in extension storage. Model inference still uses your configured API deadline; increase it in Settings if image requests expire.
+The provider receives the whole visible tab, which may include names and other personal content. Screenshots are processed in memory and are not saved in extension storage. Model inference uses your configured API deadline. Version 2.1.1 uses 5,000 ms for new installations; existing installations retain their setting. If your deadline is still 2,500 ms, increase it to at least 5,000 ms for Vision.
 
 ## Detection and limits
 
@@ -32,7 +32,7 @@ Text mode looks for one readable question associated with native radio controls,
 
 Answer controls must be in the main document. Controls inside frames or shadow roots, canvas-only answer controls, typed answers, and multi-select questions are unsupported. Text mode needs readable text and semantic headings or labels; Vision can also read visible images and canvas-rendered questions. Arbitrary layouts and accurate visual targeting are not guaranteed. There is no manual selector configuration.
 
-A changed question, replaced controls, or navigation invalidates a pending decision. Repeated presses while a request is running do not start another request. Failed or expired requests do not retry automatically. Press **Answer** to try again. The default API deadline is 2,500 ms and the minimum confidence is 0; increase the threshold to skip less confident choices. The model can answer incorrectly. Some sites reject programmatic clicks.
+A changed question, replaced controls, or navigation invalidates a pending decision. Repeated presses while a request is running do not start another request. Failed or expired requests do not retry automatically. Press **Answer** to try again. The default API deadline is 5,000 ms and the minimum confidence is 0; increase the threshold to skip less confident choices. The model can answer incorrectly. Some sites reject programmatic clicks.
 
 The popup retains the last chosen answer for each tab until the extension worker restarts or the tab closes. Timings measure API duration and time from the request starting to the local click, not grading or server receipt.
 
@@ -55,3 +55,11 @@ npm test
 ```
 
 Tests load the extension in Chromium with simulated webpages, real screenshots, and mocked provider responses. They cover text selection, vision requests, screenshot scaling and padding, coordinate clicks, stale images, changed controls, tab switches, permissions, provider routing, and errors. They make no paid API calls. Live Kahoot compatibility, model accuracy, and image-request latency require separate verification.
+
+An optional live smoke test loads the extension in a temporary Chromium profile, sends one synthetic quiz screenshot to the real provider, and checks for exactly one correct answer click and no Submit click. It makes one billed API request and reads the key from a private file without printing it:
+
+```powershell
+npm run test:vision:live -- openrouter "C:\path\to\private-key-file"
+```
+
+Use `typesafe` instead of `openrouter` for a direct TypeSafe key. Synthetic checks verify the full request and click path, not compatibility with a hosted quiz service.
