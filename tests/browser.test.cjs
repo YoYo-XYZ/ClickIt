@@ -422,7 +422,7 @@ test('Vision reads a real screenshot where Text detection fails, makes one click
     const reopened = await popup();
     try {
       assert.equal(await reopened.locator('#mode').inputValue(), 'vision');
-      assert.match(await reopened.locator('#modeHint').textContent(), /screenshot/);
+      assert.equal(await reopened.getByRole('combobox', { name: 'Read question using' }).inputValue(), 'vision');
       await reopened.screenshot({ path: path.resolve(__dirname, '../test-results/vision-popup.png'), fullPage: true });
     } finally { await reopened.close(); }
     await page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; });

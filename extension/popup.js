@@ -15,11 +15,6 @@ function controls() {
 function showProvider() {
   $('keyLabel').textContent = `${ClickIt.providers[$('provider').value].name} API key`;
 }
-function showMode() {
-  $('modeHint').textContent = $('mode').value === 'vision'
-    ? 'Sends the visible tab screenshot to your provider. Keep the full question and choices visible. Vision is experimental.'
-    : 'Reads question text and answer controls from the page.';
-}
 async function refresh(initial = false) {
   try {
     const data = await send({ type: 'inspect' });
@@ -33,20 +28,19 @@ async function refresh(initial = false) {
       for (const key of Object.keys(ClickIt.defaults)) $(key).value = data.settings[key];
       loaded = true;
       showProvider();
-      showMode();
     }
     controls();
   } catch (error) { $('message').textContent = error.message; }
 }
 $('provider').addEventListener('change', showProvider);
 $('mode').addEventListener('change', async () => {
-  sending = true; controls(); showMode();
+  sending = true; controls();
   try {
     const next = { ...saved, mode: $('mode').value };
     await send({ type: 'save', settings: next });
     saved = next;
     $('message').textContent = '';
-  } catch (error) { $('mode').value = saved.mode; showMode(); $('message').textContent = error.message; }
+  } catch (error) { $('mode').value = saved.mode; $('message').textContent = error.message; }
   finally { sending = false; controls(); }
 });
 $('settings').addEventListener('submit', async event => {
