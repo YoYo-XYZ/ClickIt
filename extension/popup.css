@@ -48,3 +48,19 @@ textarea[hidden] { display: none; }
 .row label { flex: 1; min-width: 0; }
 #saveSettings { width: 100%; padding: 11px; border-radius: 9px; background: #9becce; color: #15372e; font-weight: 650; }
 @media (prefers-reduced-motion: reduce) { #answerNow { transition: none; } }
+[hidden] { display: none !important; }
+#hostedPanel { padding: 14px; border: 1px solid #35414f; border-radius: 12px; background: #1b242f; }
+.credit-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#hostedPanel p, #accessRecovery p { font-size: 12px; line-height: 1.5; color: #b7c3d2; margin: 8px 0; }
+#creditError:empty { display: none; }
+.consent { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; margin-top: 10px; }
+.consent input { margin-top: 3px; flex: 0 0 auto; }
+#hostedPanel button, #accessRecovery button { padding: 8px 10px; border-radius: 8px; background: #283d38; color: #bcf3dc; }
+#startTrial, #buyCredits { width: 100%; margin-top: 12px; }
+#refreshBalance { font-size: 12px; }
+a { color: #9becce; }
+.account-links { display: flex; gap: 16px; }
+#accessRecovery { margin-top: 18px; }
+#accessRecovery summary { cursor: pointer; }
+#hostedAccessKey { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; }
+body:has(#settingsPanel:not([hidden])) #hostedPanel { display: none; }

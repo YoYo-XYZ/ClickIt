@@ -105,7 +105,8 @@ test('manifest has only user-triggered page access; old settings are discarded',
   assert.deepEqual(manifest.host_permissions, ['https://api.typesafe.ai/*', 'https://openrouter.ai/*']);
   await configure({ enabled: true, answerBank: { Question: 'Answer' }, questionSelector: 'h1', settleMs: 8 });
   const saved = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
-  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'minConfidence', 'mode', 'provider', 'textPrompt', 'timeoutMs', 'visionPrompt']);
+  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'billingMode', 'minConfidence', 'mode', 'provider', 'textPrompt', 'timeoutMs', 'visionPrompt']);
+  assert.equal(saved.billingMode, 'byok');
   assert.equal(saved.mode, 'text');
   assert.equal(saved.apiKey, 'fake-test-key');
 });

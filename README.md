@@ -1,6 +1,8 @@
 # ClickIt
 
-One click to choose an answer to a single-choice quiz.
+Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
+
+Version 3 adds a deployable hosted service with 10 free suggestions and optional US$4.99 / 500-credit top-ups. It is not connected to a live backend yet. Checkout and hosted Vision default to disabled until launch validation is complete.
 
 <p>
   <img src="docs/images/answer.png" width="300" align="top" alt="ClickIt with the Vision selector, Answer button, and status message">
@@ -11,7 +13,7 @@ One click to choose an answer to a single-choice quiz.
 
 1. [Download ZIP](https://github.com/YoYo-XYZ/ClickIt/archive/refs/heads/main.zip) and extract it.
 2. In `chrome://extensions`, enable **Developer mode**. Click **Load unpacked** and select the `extension` folder.
-3. Open ClickIt on a quiz page. Click the **gear**, choose your provider, paste your API key, and save.
+3. For the source development build, open **Settings**, choose **Advanced · your API key**, select your provider, paste your key, and save. Configured release builds offer **Start free trial** with included AI instead.
 
 ## Use it
 
@@ -23,6 +25,19 @@ One click to choose an answer to a single-choice quiz.
 
 Update the same folder, then click **Reload** on ClickIt in `chrome://extensions`.
 
-API usage is billed by your provider. Vision sends the visible tab screenshot. Answers can be wrong.
+Hosted mode uses credits. Advanced API-key mode is billed by your provider. Vision sends the visible tab screenshot. Answers can be wrong.
+
+## Deploy the monetized release
+
+[Deployment, payments, validation, and operating guide](docs/LAUNCH.md) · [Store listing and launch materials](docs/STORE.md)
+
+```powershell
+npm ci
+npm test
+npm run check:worker
+npm run package:extension -- --api-url https://YOUR-WORKER.workers.dev
+```
+
+The Worker serves the public pages and API from the same origin. A custom domain is optional. No API or payment secrets belong in the extension. Your deployment needs Cloudflare authentication, D1, provider and Stripe secrets, and the published extension origin before it can accept live customers.
 
 [Help, privacy, and developer instructions](docs/REFERENCE.md)

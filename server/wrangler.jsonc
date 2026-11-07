@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "clickit",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "../site", "binding": "ASSETS", "run_worker_first": ["/v1/*"] },
+  "d1_databases": [{ "binding": "DB", "database_name": "clickit", "database_id": "REPLACE_WITH_D1_DATABASE_ID", "migrations_dir": "migrations" }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": { "enabled": false },
+  "vars": {
+    "PUBLIC_URL": "https://REPLACE_WITH_WORKER_HOST",
+    "SUPPORT_URL": "mailto:thammatorn.j@gmail.com",
+    "STORE_URL": "",
+    "EXTENSION_ORIGINS": "",
+    "TRIAL_ENABLED": "false",
+    "INFERENCE_ENABLED": "false",
+    "VISION_ENABLED": "false",
+    "CHECKOUT_ENABLED": "false",
+    "STRIPE_LIVE_MODE": "false",
+    "STRIPE_AUTOMATIC_TAX": "false",
+    "STRIPE_PRICE_ID": ""
+  }
+}

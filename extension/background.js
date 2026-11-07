@@ -1,4 +1,4 @@
-importScripts('core.js', 'vision.js');
+importScripts('core.js', 'vision.js', 'config.js', 'hosted.js');
 const C = ClickIt;
 const V = ClickItVision;
 const jobs = new Map();
@@ -38,7 +38,7 @@ async function decide(q, config, signal) {
 }
 
 async function run(tabId, job, config) {
-  let target, suggested = false;
+  let target, suggested = false, delivered = false;
   const vision = config.mode === 'vision';
   const pageCall = async (method, ...args) => {
     const [action] = await chrome.scripting.executeScript({
@@ -77,7 +77,7 @@ async function run(tabId, job, config) {
     report({ text: 'Jev is choosing…' });
     const timeout = setTimeout(() => job.controller.abort(new Error('Request expired or was cancelled. Press Answer to retry.')), config.timeoutMs);
     let result;
-    try { result = await decide(q, config, job.controller.signal); }
+    try { result = config.billingMode === 'hosted' ? await ClickItHosted.answer(q, config.mode, job) : await decide(q, config, job.controller.signal); }
     finally { clearTimeout(timeout); }
     if (job.controller.signal.aborted) throw new Error('Request cancelled.');
     if (result.confidence < config.minConfidence) throw new Error(`Skipped: answer confidence ${Math.round(result.confidence * 100)}% is below your ${Math.round(config.minConfidence * 100)}% threshold.`);
@@ -92,14 +92,21 @@ async function run(tabId, job, config) {
     const action = await pageCall('click', clickTarget, targetRegion);
     if (action.suggested) job.controller.signal.throwIfAborted();
     suggested = action.suggested === true;
+    delivered = true;
     if (suggested) suggestions.set(tabId, { target, windowId: job.windowId });
-    report({ text: suggested ? 'Click the highlighted answer manually. No automatic click made.' :
+    const status = { text: suggested ? 'Click the highlighted answer manually. No automatic click made.' :
       action.clicked ? 'Answer clicked. Submit it yourself if needed.' : 'Answer already selected. No click needed.',
-      answer: vision ? action.answer : q.options[result.index], confidence: result.confidence, apiMs: result.apiMs, totalMs: Math.round(performance.now() - started) });
+      answer: vision ? action.answer : q.options[result.index], confidence: result.confidence, apiMs: result.apiMs, totalMs: Math.round(performance.now() - started) };
+    report(status);
+    if (config.billingMode === 'hosted') {
+      const synced = await ClickItHosted.complete(job, true).catch(() => false);
+      if (!synced) report({ ...status, text: `${status.text} Balance update pending.` });
+    }
   } catch (error) {
     report({ text: job.controller.signal.aborted ? job.controller.signal.reason?.message || 'Request expired or was cancelled. Press Answer to retry.' :
-      error instanceof TypeError ? `Cannot reach ${C.providers[config.provider].name}. Check your connection and press Answer.` : error.message });
+      error instanceof TypeError ? `Cannot reach ${config.billingMode === 'hosted' ? 'ClickIt' : C.providers[config.provider].name}. Check your connection and press Answer.` : error.message });
   } finally {
+    if (!delivered && job.hostedRequestId) await ClickItHosted.complete(job, false).catch(() => {});
     if (target && !suggested) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
     if (jobs.get(tabId) === job) jobs.delete(tabId);
   }
@@ -112,7 +119,14 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     await ready;
     if (message.type === 'inspect') {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      return { settings, busy: jobs.has(tab?.id), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
+      return { settings, hosted: await ClickItHosted.state(), busy: jobs.has(tab?.id) || (settings.billingMode === 'hosted' && jobs.size > 0), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
+    }
+    if (['startTrial', 'refreshBalance', 'checkout', 'restoreAccess'].includes(message.type)) {
+      if (jobs.size) throw new Error('Wait for the current answer before changing credits or access.');
+      if (message.type === 'startTrial') return ClickItHosted.register(message);
+      if (message.type === 'refreshBalance') return ClickItHosted.state(true);
+      if (message.type === 'restoreAccess') return ClickItHosted.restore(message.credential);
+      return ClickItHosted.checkout();
     }
     if (message.type === 'save') {
       if (jobs.size) throw new Error('Wait for the current answer before saving settings.');
@@ -121,10 +135,18 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       return { saved: true };
     }
     if (message.type === 'answer') {
-      if (!settings.apiKey) throw new Error('Add your API key in Settings first.');
+      if (settings.billingMode === 'byok' && !settings.apiKey) throw new Error('Add your API key in Settings first.');
+      if (settings.billingMode === 'hosted') {
+        if (jobs.size) throw new Error('Another answer is active. Please wait.');
+        const hosted = await ClickItHosted.state();
+        if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
+        if (!hosted.registered) throw new Error('Start your free trial first.');
+        if (settings.mode === 'vision' && !hosted.balance?.visionEnabled) throw new Error('Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
+      }
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id || (tab.url && !/^https?:\/\//.test(tab.url))) throw new Error('Open a regular webpage and invoke ClickIt from its toolbar icon.');
       if (jobs.has(tab.id)) throw new Error('Already answering this tab.');
+      if (settings.billingMode === 'hosted' && jobs.size) throw new Error('Another answer is active. Please wait.');
       const job = { controller: new AbortController(), windowId: tab.windowId, vision: settings.mode === 'vision' };
       jobs.set(tab.id, job);
       void run(tab.id, job, settings);

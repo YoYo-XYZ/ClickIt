@@ -1,3 +1,11 @@
 node_modules/
 test-results/
 *.zip
+dist/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+.clickit-private/

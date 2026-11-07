@@ -40,6 +40,16 @@ The popup retains the last chosen answer or suggestion for each tab until the ex
 
 ## Access and data
 
+### Hosted credits
+
+Configured version 3 releases default to included AI. Users explicitly confirm adult casual use and data processing before starting a 10-credit trial. Text questions or visible-tab screenshots are sent through ClickIt's Cloudflare Worker to TypeSafe. The backend keeps the provider key, authoritative balances, request metadata, and payment references. It does not store quiz content or screenshots. Hosted Vision remains disabled until its compatibility checks pass.
+
+One valid suggestion costs one credit, including a highlight or an already-selected answer. Page changes, visibility failures, invalid responses, and failed requests release reservations. A valid but incorrect suggestion can consume a credit. A failed acknowledgment is saved in trusted extension storage for retry, with abandoned reservations expiring after two minutes. The backend's scheduled cleanup runs every five minutes.
+
+Credits and checkout status are shown in the popup. Checkout opens in a Stripe-hosted browser tab and is blocked during an answer request. Payments are fulfilled from signed webhooks, not the return page. Settings contains a password-masked installation access key to back up or restore credit access. This key is stored unencrypted locally, and only its hash is stored by the server. Keep it private. Contact thammatorn.j@gmail.com privately for payment recovery or first-pack refund requests.
+
+Existing installations with an API key retain their direct-provider mode. The original direct-provider details below apply to that advanced mode. Hosted mode uses the packaged deployment origin, requires no customer API key, and uses the server's fixed prompts. The source development build has no hosted origin and needs deployment packaging before trial registration works.
+
 Page access uses Chrome's [activeTab permission](https://developer.chrome.com/docs/extensions/develop/concepts/activeTab), granted when you invoke the toolbar action. No quiz content script runs before you press Answer. Persistent host permissions cover only the two API providers.
 
 The selected provider receives the detected question and answer choices in Text mode, or the visible-tab screenshot in Vision mode. TypeSafe uses `https://api.typesafe.ai/v1/systemone` with `jev-1.14.0`; OpenRouter uses `https://openrouter.ai/api/alpha/decisions` with `typesafe/jev-1.14`. Requests omit browser cookies. There is no provider fallback. API usage is billed by your provider.
