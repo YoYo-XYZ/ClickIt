@@ -7,7 +7,6 @@
 | Message | Try this |
 | --- | --- |
 | Question visibility is below 70% | Show the complete question and readable answer choices. |
-| The answer target is outside the answer choices | Press Answer again. If you edited the Vision prompt, try Reset in Settings and save. |
 | No supported, enabled answer button | Wait for the choices to become enabled. For unsupported controls, Vision can show a manual highlight. |
 | Request expired | Increase API deadline to 5,000 ms or more in Settings. |
 | API key rejected | Select the provider that issued your key and save its key. |
@@ -18,7 +17,7 @@ Choose **Vision · screenshot** when Text mode misses a question that you can re
 
 Keep the complete question and all answer choices visible. On Kahoot, Vision can help when the question is displayed in your participant tab but Text detection fails. If your tab shows only colored shapes and the question is on another display, that screenshot does not contain enough information to answer.
 
-Vision checks whether a single-choice question and its choices are visible, separately from finding the correct answer. Visibility must reach 70%; when it does not, the popup shows the returned score. Your configured minimum confidence applies to the chosen answer. There is no hidden 80% confidence floor for region boxes. The answer's center must fall inside the detected choice area; small differences between independently predicted box edges are allowed. TypeSafe marks image input and Box output as [experimental](https://docs.typesafe.ai/images); the [OpenRouter API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request) also accepts image assets and Box questions.
+Vision checks whether a single-choice question and its choices are visible, separately from finding the correct answer. Visibility must reach 70%; when it does not, the popup shows the returned score. Your configured minimum confidence applies to the chosen answer. There is no hidden 80% confidence floor for region boxes. The target can fall outside the model's predicted choices area; page and control checks still apply. TypeSafe marks image input and Box output as [experimental](https://docs.typesafe.ai/images); the [OpenRouter API](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request) also accepts image assets and Box questions.
 
 Vision takes one screenshot per request. It does not take a second screenshot or compare pixels before clicking or highlighting. Scrolling, resizing, switching tabs, navigation, replaced or disabled answer controls, and detected page-content changes inside the question or choices still stop the action. Canvas-only visual changes do not stop it. Screenshot captures are spaced to respect Chrome's capture rate limit.
 
