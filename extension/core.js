@@ -87,6 +87,11 @@
         box.left >= box.right || box.top >= box.bottom) throw new Error('The API returned an invalid answer region.');
       boxes[name] = box;
     }
+    const { target, choices } = boxes;
+    const x = (target.left + target.right) / 2, y = (target.top + target.bottom) / 2;
+    if (x < choices.left || x > choices.right || y < choices.top || y > choices.bottom) {
+      throw new Error('The answer target is outside the answer choices. No click made.');
+    }
     return { boxes, confidence: body.answers.target.confidence };
   }
   globalThis.ClickIt = { defaults, providers, validateSettings, validateQuestion, requestBody, parseAnswer, visionRequest, parseVision };

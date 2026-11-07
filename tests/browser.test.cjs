@@ -543,6 +543,7 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
     body => { body.answers.target.box.left = -0.1; },
     body => { body.answers.target.box.left = body.answers.target.box.right; },
     body => { body.answers.target.confidence = 0.5; },
+    body => { body.answers.choices.box.right = 0.1; },
     body => { body.model = 'jev-1.13.0'; }
   ];
   for (const mutate of mutations) {
@@ -557,14 +558,14 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
   }
 });
 
-test('Vision accepts an answer button outside the predicted choices box', async () => {
+test('Vision accepts real-provider confidence and rounded boxes when the target center hits the answer', async () => {
   await configure({ mode: 'vision' });
   await scenario(visionFixture, async (page, controls) => {
     await mockVision(page, body => {
       body.answers.ready.noul = 0.8;
       body.answers.choices.confidence = 0.5;
       body.answers.target.confidence = 0.64;
-      body.answers.choices.box.bottom = body.answers.target.box.top;
+      body.answers.choices.box.bottom = body.answers.target.box.bottom - 0.02;
       return body;
     });
     await start(page, controls);
