@@ -2,7 +2,7 @@
 -- Window: last 30 days. Request history is retained for 90 days.
 SELECT COUNT(*) AS installations FROM installations;
 SELECT source, COUNT(*) AS installations FROM installations GROUP BY source;
-SELECT COUNT(*) AS activated FROM credit_lots WHERE order_id IS NULL AND consumed > 0;
+SELECT COUNT(*) AS activated FROM credit_lots WHERE id LIKE 'trial:%' AND consumed > 0;
 SELECT COUNT(*) AS five_suggestion_users FROM installations i WHERE
   (SELECT COALESCE(SUM(consumed),0) FROM credit_lots WHERE installation_id=i.id)>=5;
 SELECT COUNT(*) AS checkouts, COUNT(DISTINCT installation_id) AS checkout_users FROM checkouts
@@ -13,6 +13,23 @@ SELECT COUNT(*) AS purchases, COUNT(DISTINCT installation_id) AS buyers,
 SELECT COUNT(*) AS repeat_buyers FROM (SELECT installation_id FROM orders WHERE refunded_amount<total_amount GROUP BY installation_id HAVING COUNT(*)>1);
 SELECT stripe_fee_currency, SUM(stripe_fee) AS fees_minor_units, COUNT(*) AS orders FROM orders GROUP BY stripe_fee_currency;
 SELECT COUNT(*) AS orders_missing_fees FROM orders WHERE stripe_fee IS NULL;
+-- Current state and nominal USD MRR, excluding tax and failed renewals.
+SELECT plan_id,COUNT(*) AS active_subscribers,
+  SUM(CASE plan_id WHEN 'basic' THEN 499 ELSE 999 END) AS mrr_usd_cents
+  FROM subscriptions WHERE status='active' AND period_end>unixepoch()*1000 GROUP BY plan_id;
+SELECT status,COUNT(*) AS subscriptions FROM subscriptions GROUP BY status;
+SELECT COUNT(*) AS cancellations_scheduled FROM subscriptions WHERE cancel_at_period_end=1 AND status NOT IN ('canceled','incomplete_expired');
+SELECT scheduled_plan,COUNT(*) AS scheduled_changes FROM subscriptions WHERE scheduled_plan IS NOT NULL GROUP BY scheduled_plan;
+SELECT COUNT(*) AS failed_or_action_required FROM subscriptions WHERE status IN ('past_due','unpaid','incomplete') OR payment_url IS NOT NULL;
+SELECT COUNT(*) AS reconciliation_failures FROM billing_accounts WHERE reconcile_error=1;
+SELECT kind,COUNT(*) AS paid_invoices,SUM(total_amount) AS gross_usd_cents,
+  SUM(tax_amount) AS tax_usd_cents,SUM(refunded_amount) AS refunded_usd_cents
+  FROM subscription_invoices WHERE created_at>=unixepoch()*1000-30*86400000 GROUP BY kind;
+SELECT COUNT(*) AS paid_renewals FROM subscription_invoices i WHERE kind='monthly'
+  AND created_at>=unixepoch()*1000-30*86400000 AND EXISTS
+  (SELECT 1 FROM subscription_invoices first WHERE first.subscription_id=i.subscription_id AND first.kind='monthly' AND first.period_start<i.period_start);
+SELECT stripe_fee_currency,SUM(stripe_fee) AS fees_minor_units FROM subscription_invoices GROUP BY stripe_fee_currency;
+SELECT COUNT(*) AS invoices_missing_fees FROM subscription_invoices WHERE stripe_fee IS NULL AND payment_intent IS NOT NULL;
 SELECT kind,COUNT(*) AS events FROM events GROUP BY kind;
 SELECT mode,status,COUNT(*) AS requests,SUM(cost_nano)/1000000000.0 AS inference_usd,
   SUM(input_tokens IS NULL) AS conservative_estimates,AVG(api_ms) AS mean_api_ms FROM requests GROUP BY mode,status;

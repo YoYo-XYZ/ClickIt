@@ -121,12 +121,16 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       return { settings, hosted: await ClickItHosted.state(), busy: jobs.has(tab?.id) || (settings.billingMode === 'hosted' && jobs.size > 0), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
     }
-    if (['startTrial', 'refreshBalance', 'checkout', 'restoreAccess'].includes(message.type)) {
+    if (['startTrial', 'refreshBalance', 'checkout', 'restoreAccess', 'billingPortal', 'previewUpgrade', 'changeSubscription', 'retryBilling'].includes(message.type)) {
       if (jobs.size) throw new Error('Wait for the current answer before changing credits or access.');
       if (message.type === 'startTrial') return ClickItHosted.register(message);
       if (message.type === 'refreshBalance') return ClickItHosted.state(true);
       if (message.type === 'restoreAccess') return ClickItHosted.restore(message.credential);
-      return ClickItHosted.checkout();
+      if (message.type === 'billingPortal') return ClickItHosted.portal();
+      if (message.type === 'previewUpgrade') return ClickItHosted.preview();
+      if (message.type === 'changeSubscription') return ClickItHosted.change(message.action, message.quoteId);
+      if (message.type === 'retryBilling') return ClickItHosted.retryChange();
+      return ClickItHosted.checkout(message.planId);
     }
     if (message.type === 'save') {
       if (jobs.size) throw new Error('Wait for the current answer before saving settings.');

@@ -27,4 +27,17 @@ test('Cloudflare D1 executes the migration and serializes competing reservations
   const lastBudget = await Promise.allSettled([reserve('r3','a'), reserve('r4','b')]);
   assert.equal(lastBudget.filter(r => r.status === 'fulfilled').length, 1);
   assert.equal((await db.prepare('SELECT spent_nano FROM budget').first()).spent_nano, 22020096);
+  await db.batch([
+    db.prepare("INSERT INTO installations VALUES('c','hash-c','ip','demo',0,0)"),
+    db.prepare("INSERT INTO credit_lots(id,installation_id,granted,created_at,expires_at) VALUES('monthly-c','c',500,0,10)"),
+    db.prepare('UPDATE budget SET limit_nano=10000000000'),
+    db.prepare("INSERT INTO billing_accounts(installation_id) VALUES('c')")
+  ]);
+  await assert.rejects(() => db.prepare("INSERT INTO requests(id,installation_id,lot_id,mode,created_at,expires_at,cost_nano) VALUES('expired-c','c','monthly-c','text',10,100,11010048)").run(), /no_credits/);
+  const leases=await Promise.all(['first','second'].map(lease=>db.prepare("UPDATE billing_accounts SET lease_id=?,lease_until=100 WHERE installation_id='c' AND lease_until<=0").bind(lease).run()));
+  assert.equal(leases.reduce((sum,result)=>sum+result.meta.changes,0),1);
+  // An old handler cannot release a lease that a newer handler acquired.
+  const owner=(await db.prepare("SELECT lease_id FROM billing_accounts WHERE installation_id='c'").first()).lease_id;
+  const stale=await db.prepare("UPDATE billing_accounts SET lease_until=0 WHERE installation_id='c' AND lease_id=?").bind(owner==='first'?'second':'first').run();
+  assert.equal(stale.meta.changes,0);
 });

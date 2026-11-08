@@ -1,4 +1,5 @@
 import '../extension/core.js';
+import { billingService } from './billing.mjs';
 const C = globalThis.ClickIt;
 const MAX_BODY = 3_000_000;
 const RESERVE_NANO = 11_010_048; // OpenRouter's 262,144-token context at the capped $0.042/M input price.
@@ -55,11 +56,11 @@ async function cleanup(db, now) {
     stmt(db, "UPDATE installations SET ip_hash='' WHERE created_at < ? AND ip_hash != ''", cutoff)
   ]);
 }
-async function balance(db, id, env) {
-  const row = await stmt(db, `SELECT COALESCE(SUM(MAX(0,granted-revoked-consumed-reserved)),0) AS credits,
-    COALESCE(SUM(reserved),0) AS reserved FROM credit_lots WHERE installation_id=?`, id).first();
-  return { ...row, checkoutEnabled: env.CHECKOUT_ENABLED === 'true', visionEnabled: env.VISION_ENABLED === 'true',
-    price: { amount: 499, currency: 'usd', credits: 500 }, supportUrl: env.SUPPORT_URL || '' };
+function billing(env, fetchImpl, now) {
+  return billingService({ env, now, fail, stripe: (path, form, key) => stripe(fetchImpl, env, path, form, key) });
+}
+async function balance(db, id, env, now) {
+  return billing(env, null, now).snapshot(id);
 }
 async function identity(request, db) {
   const token = /^Bearer (ci_[a-f0-9]{64})$/.exec(request.headers.get('Authorization') || '')?.[1];
@@ -109,12 +110,19 @@ async function webhook(request, env, fetchImpl, now) {
   if (!signatures.some(sig => equal(sig, expected))) fail(400, 'Invalid webhook signature.');
   let notification;
   try { notification = JSON.parse(raw); } catch { fail(400, 'Invalid webhook body.'); }
+  if (!notification || typeof notification.type !== 'string') fail(400, 'Invalid webhook event.');
   if (notification.livemode !== (env.STRIPE_LIVE_MODE === 'true')) fail(400, 'Incorrect payment environment.');
   const object = notification.data?.object;
+  const subscriptions = billing(env, fetchImpl, now);
+  if (await subscriptions.handleEvent(notification)) return json({ received: true });
   if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(notification.type)) {
     if (!/^cs_[A-Za-z0-9_]+$/.test(object?.id || '')) fail(400, 'Invalid checkout.');
     // Retrieve authoritative state and line items, including on replay or delayed delivery.
     const session = await stripe(fetchImpl, env, `checkout/sessions/${object.id}?expand[]=line_items`);
+    if (session.mode === 'subscription') {
+      await subscriptions.checkoutCompleted(session);
+      return json({ received: true });
+    }
     if (session.payment_status !== 'paid') return json({ received: true });
     const item = session.line_items?.data;
     const owner = session.client_reference_id;
@@ -181,7 +189,10 @@ export function createWorker({ fetchImpl = (...args) => fetch(...args), now = ()
         });
       }
     },
-    async scheduled(_controller, env) { await cleanup(env.DB, now()); }
+    async scheduled(_controller, env) {
+      await cleanup(env.DB, now());
+      await billing(env, fetchImpl, now()).scheduled();
+    }
   };
 }
 
@@ -207,7 +218,7 @@ async function route(request, env, url, fetchImpl, now) {
         SELECT ?,id,10,? FROM installations WHERE id=?`, `trial:${id}`, now, id)
     ]);
     if (!result[0].meta.changes) fail(429, 'The trial limit has been reached. Try later or contact support.');
-    return json({ credential, installationId: id, ...await balance(db, id, env) }, 201);
+    return json({ credential, installationId: id, ...await balance(db, id, env, now) }, 201);
   }
   const id = await identity(request, db);
   await expire(db, now);
@@ -216,32 +227,16 @@ async function route(request, env, url, fetchImpl, now) {
       stmt(db, `INSERT INTO events(installation_id,kind,created_at) SELECT id,'session_started',? FROM installations WHERE id=? AND last_seen_at<?`, now, id, now - 1800000),
       stmt(db, 'UPDATE installations SET last_seen_at=? WHERE id=?', now, id)
     ]);
-    return json(await balance(db, id, env));
+    return json(await balance(db, id, env, now));
   }
-  if (request.method === 'POST' && url.pathname === '/v1/checkout') {
-    if (env.CHECKOUT_ENABLED !== 'true') fail(403, 'Purchases open after launch validation. Your credits are unchanged.');
-    if (!env.STRIPE_PRICE_ID || !/^https:\/\//.test(env.PUBLIC_URL || '')) fail(503, 'Payments are not configured.');
-    const data = await bodyJSON(request, 1024);
-    if (!/^[a-f0-9-]{36}$/.test(data.checkoutId || '')) fail(400, 'A checkout ID is required.');
-    const existing = await stmt(db, 'SELECT installation_id FROM checkouts WHERE id=?', data.checkoutId).first();
-    if (existing && existing.installation_id !== id) fail(403, 'Invalid checkout owner.');
-    if (!existing) {
-      const inserted = await stmt(db, `INSERT INTO checkouts(id,installation_id,created_at)
-        SELECT ?,?,? WHERE (SELECT COUNT(*) FROM checkouts WHERE installation_id=? AND created_at>?)<5`,
-      data.checkoutId, id, now, id, now - 3600000).run();
-      if (!inserted.meta.changes) fail(429, 'Too many checkout attempts. Please try later.');
-    }
-    const session = await stripe(fetchImpl, env, 'checkout/sessions', {
-      mode: 'payment', 'payment_method_types[0]': 'card', 'line_items[0][price]': env.STRIPE_PRICE_ID,
-      'line_items[0][quantity]': '1', client_reference_id: id, 'metadata[clickit_checkout]': data.checkoutId,
-      success_url: `${env.PUBLIC_URL}/purchase.html`, cancel_url: `${env.PUBLIC_URL}/purchase.html?cancelled=1`,
-      'consent_collection[terms_of_service]': 'required',
-      'custom_text[submit][message]': '500 ClickIt credits. One-time US$4.99 purchase, plus applicable tax. No automatic renewal.',
-      'automatic_tax[enabled]': env.STRIPE_AUTOMATIC_TAX === 'true' ? 'true' : 'false', billing_address_collection: 'required'
-    }, `clickit:${data.checkoutId}`);
-    if (typeof session.url !== 'string' || new URL(session.url).origin !== 'https://checkout.stripe.com') fail(502, 'Unexpected checkout URL.');
-    await event(db, id, 'checkout_started', now);
-    return json({ url: session.url });
+  if (request.method === 'POST' && ['/v1/checkout', '/v1/subscription/preview', '/v1/subscription/change', '/v1/billing-portal'].includes(url.pathname)) {
+    const service = billing(env, fetchImpl, now);
+    const data = await bodyJSON(request, 4096);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) fail(400, 'Invalid billing request.');
+    if (url.pathname === '/v1/checkout') return json(await service.checkout(id, data));
+    if (url.pathname === '/v1/subscription/preview') return json(await service.preview(id, data));
+    if (url.pathname === '/v1/subscription/change') return json(await service.change(id, data));
+    return json(await service.portal(id));
   }
   if (request.method === 'POST' && url.pathname === '/v1/answers') {
     if (env.INFERENCE_ENABLED !== 'true' || !env.OPENROUTER_API_KEY) fail(503, 'Hosted answers are paused. Your balance is unchanged.');
@@ -255,14 +250,14 @@ async function route(request, env, url, fetchImpl, now) {
     if (recent.n >= 20) fail(429, 'Please wait before answering more questions.');
     try {
       const result = await stmt(db, `INSERT INTO requests(id,installation_id,lot_id,mode,created_at,expires_at,cost_nano)
-        SELECT ?,?,id,?,?,?,? FROM credit_lots WHERE installation_id=? AND granted-revoked-consumed-reserved>0 ORDER BY created_at,id LIMIT 1`,
-      data.requestId, id, input.mode, now, now + 120000, RESERVE_NANO, id).run();
-      if (!result.meta.changes) fail(402, 'No credits left. Top up to continue.');
+        SELECT ?,?,id,?,?,?,? FROM credit_lots WHERE installation_id=? AND granted-revoked-consumed-reserved>0 AND (expires_at IS NULL OR expires_at>?) ORDER BY expires_at IS NULL,expires_at,created_at,id LIMIT 1`,
+      data.requestId, id, input.mode, now, now + 120000, RESERVE_NANO, id, now).run();
+      if (!result.meta.changes) fail(402, 'No credits left. Upgrade your plan, wait for renewal, or use your own API key.');
     } catch (error) {
       if (error instanceof HttpError) throw error;
       const detail = String(error.message);
       if (detail.includes('budget_exhausted')) fail(503, 'Hosted answers are paused at the pilot spending limit. Your balance is unchanged.');
-      if (detail.includes('no_credits')) fail(402, 'No credits left. Top up to continue.');
+      if (detail.includes('no_credits')) fail(402, 'No credits left. Upgrade your plan, wait for renewal, or use your own API key.');
       fail(409, 'Another answer is active. Please wait before trying again.');
     }
     await stmt(db, 'UPDATE installations SET last_seen_at=? WHERE id=?', now, id).run();
@@ -304,7 +299,7 @@ async function route(request, env, url, fetchImpl, now) {
     if (data.delivered && row.status === 'reserved') fail(409, 'No validated answer is ready.');
     await stmt(db, `UPDATE requests SET status=?,completed_at=? WHERE id=? AND installation_id=? AND status IN ('reserved','ready')`,
       data.delivered ? 'settled' : 'released', now, data.requestId, id).run();
-    return json(await balance(db, id, env));
+    return json(await balance(db, id, env, now));
   }
   fail(404, 'Endpoint not found.');
 }

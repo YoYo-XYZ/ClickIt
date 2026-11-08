@@ -28,7 +28,14 @@ test('public pages fit desktop/mobile, show only real install links, and sample 
       await page.goto(`https://clickit.example/${name}`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}: ${name}`);
       assert.ok((await page.title()).includes('ClickIt'));
-      if (!name) assert.equal(await page.locator('[data-install]').isHidden(), true);
+      if (!name) {
+        assert.equal(await page.locator('[data-install]').isHidden(), true);
+        const pricing=await page.locator('#pricing').textContent();
+        assert.match(pricing,/Basic.*500 credits per month.*US\$4\.99/s);
+        assert.match(pricing,/Plus.*1,200 credits per month.*US\$9\.99/s);
+        assert.match(pricing,/renew automatically until canceled/);
+        assert.equal(pricing.includes('\uFFFD'),false);
+      }
     }
   }
   await page.locator('.answers button').nth(1).click();

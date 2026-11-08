@@ -37,7 +37,7 @@ button:disabled, select:disabled { opacity: .55; cursor: default; }
 .status p { margin: 0; color: #b7c3d2; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .status #timing { margin-top: 5px; color: #7e8e9e; font-size: 11px; }
 .status p:empty, .status:has(#message:not(:empty)) #status, .status:has(#message:not(:empty)) #timing { display: none; }
-body:has(#settingsPanel:not([hidden])) .mode-control, body:has(#settingsPanel:not([hidden])) #answerNow { display: none; }
+body:has(#settingsPanel:not([hidden])) .mode-control, body:has(#settingsPanel:not([hidden])) #answerNow, body:has(#settingsPanel:not([hidden])) .status { display: none; }
 #settingsToggle { position: absolute; top: 24px; right: 24px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid #303c49; border-radius: 50%; background: #232d39; color: #d8e1ea; }
 #settingsToggle:hover, #settingsToggle[aria-expanded="true"] { border-color: #82bea9; color: #a8edcf; }
 form label { display: block; margin-bottom: 14px; color: #aab8c7; font-size: 12px; }
@@ -66,3 +66,7 @@ a { color: #9becce; }
 #accessRecovery summary { cursor: pointer; }
 #hostedAccessKey { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; }
 body:has(#settingsPanel:not([hidden])) #hostedPanel { display: none; }
+#subscribeOptions label { display: block; margin: 12px 0 6px; font-size: 12px; }
+#subscriptionPlan { width: 100%; min-width: 0; padding: 8px 4px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; font-size: 11px; }
+#subscriptionActions, #upgradeQuote { display: grid; gap: 8px; margin-top: 12px; }
+#upgradeQuote { padding-top: 8px; border-top: 1px solid #35414f; }

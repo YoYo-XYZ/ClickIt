@@ -2,7 +2,7 @@
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
-Version 3 includes a hosted service with 10 free suggestions and planned US$4.99 / 500-credit top-ups. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Checkout and hosted Vision remain disabled until launch validation is complete.
+Version 3 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. Checkout and hosted Vision remain disabled until launch validation is complete. See docs/SUBSCRIPTIONS.md for billing configuration and test-clock validation.
 
 For the configured local pilot, load `dist/extension` in Chrome. The backend currently allows that folder's development extension ID. The source `extension` folder remains an unconfigured development build. Publish the Chrome Web Store extension and configure its assigned origin before distributing it to customers.
 

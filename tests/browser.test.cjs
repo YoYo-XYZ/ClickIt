@@ -321,12 +321,14 @@ test('popup saves lean settings, shows only the latest answer, and keeps it on r
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
     assert.equal(await controls.locator('#settingsToggle').getAttribute('aria-expanded'), 'true');
     assert.equal(await controls.locator('#answerNow').isVisible(), false);
+    assert.equal(await controls.locator('.status').isVisible(), false);
     await controls.screenshot({ path: path.resolve(__dirname, '../test-results/popup-settings.png'), fullPage: true });
     assert.equal(await controls.locator('#minConfidence,#timeoutMs').count(), 0);
     await controls.getByRole('button', { name: 'Save settings' }).click();
     await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
     assert.equal(await controls.locator('#settingsPanel').isVisible(), false);
     assert.equal(await controls.locator('#answerNow').isVisible(), true);
+    assert.equal(await controls.locator('.status').isVisible(), true);
     assert.deepEqual(await worker.evaluate(() => [settings.minConfidence, settings.timeoutMs]), [0.3, 5000]);
     await page.bringToFront();
     await controls.evaluate(() => document.getElementById('answerNow').click());

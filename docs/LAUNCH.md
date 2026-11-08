@@ -4,12 +4,12 @@ The implementation is ready for configuration and validation. It is not a live p
 
 ## What ships
 
-- Chrome extension with 10 trial credits, US$4.99 / 500-credit top-ups, balances, consent, backup/restore, and the existing advanced API-key mode.
+- Chrome extension with 10 trial credits, Basic US$4.99 / 500-credit and Plus US$9.99 / 1,200-credit monthly subscriptions, balances, consent, backup/restore, and the existing advanced API-key mode.
 - Cloudflare Worker, D1 migration, Stripe Checkout and signed webhook fulfillment.
 - Public landing page, a real sample quiz, privacy notice, refund terms, and purchase-return page.
 - Support contact: thammatorn.j@gmail.com. Private purchase recovery uses email, never public GitHub issues.
 
-All four service flags default to false. The source extension has no hosted URL and works with your own API key in Advanced settings. Release packaging inserts only the selected HTTPS service origin into its host permissions. API and Stripe secret keys stay on the server.
+The supplied configuration enables trial Text inference but keeps checkout and hosted Vision disabled. The source extension has no hosted URL and works with your own API key in Advanced settings. Release packaging inserts only the selected HTTPS service origin into its host permissions. API and Stripe secret keys stay on the server.
 
 ## 1. Create the free Cloudflare deployment
 
@@ -62,30 +62,13 @@ The first invocation of a request atomically reserves a credit. The extension ac
 
 Back up the installation access key in Settings. Do not clear extension storage during a paid pilot without making a backup. The server stores only a hash, so it cannot display the old key later.
 
-## 3. Configure Stripe in test mode
+## 3. Configure Stripe subscriptions in test mode
 
-Use the existing Thailand Stripe account. Verify the legal business profile, account eligibility, settlement details, tax registrations, and intended customer countries before accepting live payments. Stripe Checkout is not assumed to be a merchant of record here.
+Follow [Subscription operations](SUBSCRIPTIONS.md) for the authoritative billing configuration, migration, API contract, webhook events, portal settings, and Stripe test-clock matrix. It replaces the previous one-time-pack launch procedure.
 
-In Stripe:
+Apply migration `0003_subscriptions.sql` before deploying the compatible Worker. Configure Basic and Plus monthly prices on one product using `STRIPE_BASIC_PRICE_ID` and `STRIPE_PLUS_PRICE_ID`, plus a dedicated `STRIPE_PORTAL_CONFIGURATION_ID`. Retain `STRIPE_PRICE_ID` only for historical pack fulfillment. API requests and webhook payloads must remain pinned to 2024-06-20.
 
-1. Create a product called `ClickIt 500 credits` with a one-time USD price of `4.99`. Do not use a recurring price, adjustable quantity, promotion codes, or a customer-chosen amount.
-2. Set `STRIPE_PRICE_ID` to that test price ID. Set `STRIPE_LIVE_MODE=false`.
-3. Enter the public `/terms.html` and `/privacy.html` URLs in Stripe's public business details. Set support email to thammatorn.j@gmail.com and enable customer receipts. Checkout requires acceptance of the terms.
-4. Create a webhook endpoint at `https://YOUR-WORKER/v1/stripe/webhook`. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, and `charge.refunded`.
-5. Store the test secret key and webhook signing secret:
-
-```powershell
-npx wrangler secret put STRIPE_SECRET_KEY --config server/wrangler.jsonc
-npx wrangler secret put STRIPE_WEBHOOK_SECRET --config server/wrangler.jsonc
-```
-
-For test checkout only, enable `CHECKOUT_ENABLED=true` in a separate test deployment/database or during a closed test window. The flag controls visibility and the server endpoint. Disable it again after testing. Never mix test-mode credits with the live paid database: use a separate D1 database for payment tests, or remove only verified test installations before public launch. Do not reset the public budget or credit ledger to erase test activity after real users have joined.
-
-Checkout accepts cards only for the initial release. It creates the fixed line item server-side, binds it to the authenticated installation, and uses a signed webhook plus authoritative Stripe lookups to grant credits once. Closing the return page cannot prevent fulfillment. Tax can increase the total above $4.99; the subtotal remains $4.99. Set `STRIPE_AUTOMATIC_TAX=true` only after configuring the corresponding Stripe Tax registrations and settings. With it false, do not interpret that as a determination that no tax is owed.
-
-Test successful payment, abandoned checkout, a closed return page, duplicate webhook deliveries, wrong or unpaid products, a full refund, a partial refund, and a refund delivered before fulfillment. Partial refunds proportionally revoke the matching purchase's entitlement, rounded up, without taking credits from unrelated purchases. Refunds never resurrect credits when a held request is released.
-
-Stripe fee details can be unavailable when the initial webhook arrives. Such orders retain a null fee, not zero. Reconcile missing fees against Stripe before reporting contribution. Fees may be denominated in THB while revenue is in USD; use actual settlement conversions rather than adding different currencies.
+Checkout remains disabled in the public configuration. Use a separate test deployment to validate initial payments, renewals, upgrades, downgrades, cancellation, recovery, required refunds, webhook retries, and reconciliation before live billing. No live credentials or successful external subscription tests are implied by local tests.
 
 ## 4. Validate real quiz sessions
 
@@ -118,7 +101,7 @@ Release thresholds: at least five testers and 100 observations overall; each off
 
 `docs/STORE.md` contains listing copy, permission explanations, disclosure notes, and screenshot instructions. Build the extension with the real hosted origin before submitting. Supply the real privacy URL. Review the exact privacy disclosures against the final deployed behavior.
 
-Use `dist/clickit-extension.zip` with icons and packaged config. The initial listing should say the pilot is pending/open as appropriate and should disclose the future optional $4.99 / 500-credit purchase. Do not advertise hosted Vision until validated. Store approval timing is external to the one-week implementation schedule.
+Use `dist/clickit-extension.zip` with icons and packaged config. The initial listing should say the pilot is pending/open as appropriate and should disclose the optional Basic and Plus monthly subscriptions, automatic renewal, and monthly credit expiry. Do not advertise hosted Vision until validated. Store approval timing is external to the one-week implementation schedule.
 
 After approval, put the real store listing URL into `STORE_URL` in Wrangler config and redeploy. The public install link remains hidden when no valid store URL is set.
 
@@ -127,8 +110,8 @@ Before enabling live purchases, verify:
 - Store approval, matching extension origin, and working install/update flow.
 - Real benchmark thresholds passed for all advertised modes.
 - Stripe product/account eligibility, support details, refunds, and appropriate tax configuration checked for the initial countries.
-- Live price ID, live secret key, live webhook secret, and `STRIPE_LIVE_MODE=true` configured together.
-- First-pack seven-day refund offer, private recovery contact, and service-closure refund process are published.
+- Both live recurring price IDs, portal configuration, live secret key, live webhook secret, and `STRIPE_LIVE_MODE=true` configured together.
+- Monthly renewal, expiry, end-of-period cancellation, no-voluntary-refund policy, private recovery contact, and preserved legacy terms are published.
 - One controlled live payment and refund verified, with the user's authorization for the actual charge.
 
 Enable `CHECKOUT_ENABLED=true` only when those checks are complete. No automatic release gate claims to verify external approval or legal eligibility.
@@ -147,9 +130,9 @@ Run reports:
 npx wrangler d1 execute clickit --remote --config server/wrangler.jsonc --file server/metrics.sql
 ```
 
-Use credit-lot totals for lifetime activation and five-suggestion counts because detailed requests are deleted after 90 days. Track returning sessions from `events`, repeat buyers from non-refunded orders, and actual customer-support minutes in `support_actions`. Measure end-to-end latency in the validation report; `api_ms` in requests is only server-side inference time.
+Use credit-lot totals for lifetime activation and five-suggestion counts because detailed requests are deleted after 90 days. Track returning sessions from `events`, paid renewals and active subscribers from subscription invoices and subscription state, and actual customer-support minutes in `support_actions`. Measure end-to-end latency in the validation report; `api_ms` in requests is only server-side inference time.
 
-Track contribution per fully used 500-credit pack as revenue less tax, actual Stripe fees converted to the same currency, a refund allowance, all 500 suggestions' AI cost including the allocated cost of failed/free requests, and variable hosting. Keep it at least US$3.50 before labor and income tax. Reconcile actual charges instead of relying on advertised token pricing alone.
+Track contribution per fully used subscriber billing period as revenue less tax, actual Stripe fees converted to the same currency, a refund allowance, the monthly allowance's AI cost including the allocated cost of failed/free requests, and variable hosting. Measure each tier separately before labor and income tax. Reconcile actual charges instead of relying on advertised token pricing alone.
 
 Do not enable Worker request-body logging. Production observability is off in the supplied config. Scheduled cleanup removes technical request/session history after 90 days and clears old registration IP hashes. Purchase records and credit-lot totals remain for access, disputes, and bookkeeping.
 
@@ -167,7 +150,7 @@ The command writes an ignored private directory containing `rotate.sql` and `acc
 npx wrangler d1 execute clickit --remote --config server/wrangler.jsonc --file .clickit-private/GENERATED_DIRECTORY/rotate.sql
 ```
 
-For eligible refunds, issue the refund in the Stripe Dashboard. The webhook revokes only the refunded purchase's credits, including after event replay. Record support time using a `support_actions` row associated with the installation. If webhook delivery failed, retry the event from Stripe after repairing the service.
+For billing errors or required refunds, issue the refund in the Stripe Dashboard. Legacy purchases retain their original refund terms. The webhook revokes only the refunded payment's credits, including after event replay. Record support time using a `support_actions` row associated with the installation. If webhook delivery failed, retry the event from Stripe after repairing the service.
 
 For an outage, disable `INFERENCE_ENABLED` and, if appropriate, `CHECKOUT_ENABLED`, redeploy, and post the status through the public page. Do not delete the database or overwrite balances. Back up D1 before migrations and use Cloudflare recovery facilities if needed. Restore a compatible Worker version for code regressions; preserve payment webhooks and the existing ledger. Versions predating the OpenRouter migration need a compatible reservation trigger before rollback. Do not roll back to direct TypeSafe inference without an explicit provider decision and credentials.
 
@@ -184,8 +167,11 @@ Initial operating targets, not forecasts:
 - Reach 10 buyers before broadening features or buying traffic.
 - If 50 users reach five suggestions with no purchases, pause expansion and interview them about reliability, price, and need.
 
-At 30 buyers and five repeat purchases, test a separate US$9.99 / 1,200-credit offer. That future SKU is intentionally not accepted by the current fixed-pack fulfillment handler. Add it with explicit server-side product mapping and tests when the evidence justifies it. Consider subscriptions only after observed weekly use across four weeks. Explanations, history, teams, affiliate infrastructure, and broader assessment support remain deferred.
-# Pilot deployment status
+Basic and Plus are the only current paid offers. Do not add one-time top-ups, annual plans, or more tiers without a separate product decision. Explanations, history, teams, affiliate infrastructure, and broader assessment support remain deferred.
+
+# Pilot deployment status before subscription migration
+
+The observations below describe the earlier one-time-pack pilot. The subscription code and migration still require deployment. Real test-mode recurring prices and a portal configuration have been created and the Stripe test-clock lifecycle checks passed; see [Subscription operations](SUBSCRIPTIONS.md) for the recorded evidence and remaining deployment checks. Checkout validation remains blocked by the missing Terms URL at the user's request. Public checkout remains disabled.
 
 The pilot is deployed at https://clickit.thammatorn-clickit.workers.dev. OpenRouter inference is connected with a dedicated US$10 capped key and the application spending ceiling. A synthetic hosted request completed and settled one trial credit. This does not replace real quiz validation.
 

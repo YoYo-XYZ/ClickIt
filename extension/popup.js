@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 let loaded = false, sending = false, running = false;
 let saved;
 let hosted;
+let upgradeQuote = null;
 let modeSave = null;
 function selectedMode() {
   return document.querySelector('input[name="mode"]:checked').value;
@@ -23,9 +24,13 @@ function controls() {
   $('saveSettings').disabled = !loaded || sending || running;
   $('mode').disabled = !loaded || sending || running;
   $('resetPrompt').disabled = !loaded || sending || running;
-  for (const id of ['refreshBalance', 'buyCredits', 'restoreAccess']) $(id).disabled = !loaded || sending || running;
+  for (const id of ['refreshBalance', 'buyCredits', 'restoreAccess', 'subscriptionPlan', 'upgradePlan', 'downgradePlan', 'keepPlan', 'manageSubscription', 'cancelSubscription', 'resumeSubscription', 'confirmUpgrade', 'dismissUpgrade', 'retryBilling']) $(id).disabled = !loaded || sending || running;
   $('startTrial').disabled = !loaded || sending || running || !hosted?.configured || !$('adultConsent').checked || !$('dataConsent').checked;
   $('buyCredits').disabled ||= !hosted?.balance?.checkoutEnabled;
+  $('upgradePlan').disabled ||= !hosted?.balance?.checkoutEnabled;
+  $('downgradePlan').disabled ||= !hosted?.balance?.checkoutEnabled;
+  $('manageSubscription').disabled ||= !hosted?.balance?.billingManagementAvailable;
+  $('confirmUpgrade').disabled ||= !upgradeQuote || Date.now() >= upgradeQuote.expiresAt;
 }
 function showBilling() {
   const byok = $('billingMode').value === 'byok';
@@ -36,17 +41,35 @@ function showBilling() {
 function showCredits() {
   if (!hosted) return;
   const value = hosted.balance;
+  const sub = value?.subscription;
+  const live = sub && !['canceled', 'incomplete_expired'].includes(sub.status);
+  $('retryBilling').hidden = !hosted.billingOperationPending;
   $('trialConsent').hidden = hosted.registered;
   $('refreshBalance').hidden = !hosted.registered;
-  $('buyCredits').hidden = !hosted.registered;
+  $('subscribeOptions').hidden = !hosted.registered || live;
+  $('subscriptionActions').hidden = !hosted.registered || (!live && !value?.billingManagementAvailable);
+  $('upgradePlan').hidden = !live || sub.planId !== 'basic' || sub.status !== 'active' || sub.cancelAtPeriodEnd || sub.pendingUpgrade;
+  $('downgradePlan').hidden = !live || sub.planId !== 'plus' || sub.status !== 'active' || sub.cancelAtPeriodEnd || sub.pendingUpgrade || Boolean(sub.scheduledPlan);
+  $('keepPlan').hidden = !live || !sub.scheduledPlan;
+  $('cancelSubscription').hidden = !live || sub.cancelAtPeriodEnd;
+  $('resumeSubscription').hidden = !live || !sub.cancelAtPeriodEnd;
   $('creditBalance').textContent = hosted.registered ? `${value?.credits ?? '…'} credits left` : '10 free suggestions';
+  $('creditBreakdown').hidden = !hosted.registered || value?.monthlyCredits === undefined;
+  $('creditBreakdown').textContent = `${value?.monthlyCredits ?? 0} monthly credits · ${value?.otherCredits ?? 0} free / legacy credits`;
+  const date = sub ? new Date(sub.periodEnd).toLocaleDateString() : '';
+  const planName = sub?.planId === 'plus' ? 'Plus' : 'Basic';
   $('creditNote').textContent = hosted.registered ? (
     hosted.pending ? 'Credit sync pending. Refresh if your balance does not update.' :
     value?.reserved ? `${value.reserved} credit reserved for an active request.` :
-    !value?.checkoutEnabled ? 'Purchases are not available yet. Your credits are preserved.' :
-    value.credits <= 50 ? 'Running low. Top up with 500 credits for $4.99.' : 'One credit per valid suggestion. No automatic renewal.'
-  ) : 'Then $4.99 for 500 credits. No subscription.';
-  $('creditError').textContent = hosted.error || (!hosted.configured ? 'Hosted AI is not connected in this build. Advanced settings supports your own API key.' : '');
+    sub?.pendingUpgrade ? 'Upgrade awaiting payment. Open Manage subscription / payment to finish paying the invoice.' :
+    sub?.paymentActionRequired ? 'Payment needs attention. No new monthly credits are granted until payment succeeds.' :
+    live && sub.cancelAtPeriodEnd ? `${planName} ends ${date}. Monthly credits expire then. Automatic renewal is off.` :
+    live && sub.scheduledPlan ? `${planName} renews on Basic ${date}. Current monthly credits expire then.` :
+    live ? `${planName} renews ${date}. ${sub.allowance} credits per month, no rollover.${value.monthlyCredits === 0 ? ' Upgrade or wait for renewal; your own API key is also available.' : ''}` :
+    !value?.checkoutEnabled ? 'Subscriptions are not available yet. Your credits are preserved.' :
+    'Choose Basic or Plus. Renews monthly until canceled. Monthly credits do not roll over.'
+  ) : '10 free suggestions, then Basic $4.99/month or Plus $9.99/month. No card required to try.';
+  $('creditError').textContent = hosted.error || (value?.billingSyncError ? 'Billing sync needs attention. Refresh later or contact support.' : !hosted.configured ? 'Hosted AI is not connected in this build. Advanced settings supports your own API key.' : '');
 }
 function showProvider() {
   $('keyLabel').textContent = `${ClickIt.providers[$('provider').value].name} API key`;
@@ -165,7 +188,29 @@ async function accountAction(message) {
 }
 $('startTrial').addEventListener('click', () => accountAction({ type: 'startTrial', adultConsent: $('adultConsent').checked, dataConsent: $('dataConsent').checked }));
 $('refreshBalance').addEventListener('click', () => accountAction({ type: 'refreshBalance' }));
-$('buyCredits').addEventListener('click', () => accountAction({ type: 'checkout' }));
+$('buyCredits').addEventListener('click', () => accountAction({ type: 'checkout', planId: $('subscriptionPlan').value }));
+$('manageSubscription').addEventListener('click', () => accountAction({ type: 'billingPortal' }));
+$('retryBilling').addEventListener('click', () => accountAction({ type: 'retryBilling' }));
+for (const [id, action] of Object.entries({ downgradePlan: 'downgrade', keepPlan: 'keep_plan', cancelSubscription: 'cancel', resumeSubscription: 'resume' })) {
+  $(id).addEventListener('click', () => accountAction({ type: 'changeSubscription', action }));
+}
+$('upgradePlan').addEventListener('click', async () => {
+  if (sending || running) return;
+  sending = true; controls();
+  try {
+    upgradeQuote = await send({ type: 'previewUpgrade' });
+    const price = new Intl.NumberFormat(undefined, { style: 'currency', currency: upgradeQuote.currency }).format(upgradeQuote.amount / 100);
+    $('upgradeQuoteText').textContent = `Pay ${price} now to upgrade. Add ${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString()}. Then Plus renews at $9.99/month plus applicable tax. Quote valid for five minutes.`;
+    $('upgradeQuote').hidden = false;
+  } catch (error) { $('message').textContent = error.message; }
+  finally { sending = false; controls(); }
+});
+$('confirmUpgrade').addEventListener('click', async () => {
+  if (!upgradeQuote || Date.now() >= upgradeQuote.expiresAt) return;
+  await accountAction({ type: 'changeSubscription', action: 'upgrade', quoteId: upgradeQuote.quoteId });
+  $('upgradeQuote').hidden = true; upgradeQuote = null;
+});
+$('dismissUpgrade').addEventListener('click', () => { $('upgradeQuote').hidden = true; upgradeQuote = null; });
 $('restoreAccess').addEventListener('click', () => accountAction({ type: 'restoreAccess', credential: $('hostedAccessKey').value.trim() }));
 $('showAccessKey').addEventListener('click', () => {
   const show = $('hostedAccessKey').type === 'password';

@@ -1,13 +1,15 @@
 (() => {
   let credential = '', installationId = '', cached = null, lastRefresh = 0, refreshing, registering;
   let pending = {};
+  let billingOperation = null;
   const live = new Set();
   const config = ClickItConfig;
-  const ready = chrome.storage.local.get(['hostedCredential', 'hostedInstallationId', 'hostedBalance', 'hostedPending']).then(stored => {
+  const ready = chrome.storage.local.get(['hostedCredential', 'hostedInstallationId', 'hostedBalance', 'hostedPending', 'hostedBillingOperation']).then(stored => {
     credential = stored.hostedCredential || '';
     installationId = stored.hostedInstallationId || '';
     cached = stored.hostedBalance || null;
     pending = stored.hostedPending || {};
+    billingOperation = stored.hostedBillingOperation || null;
   });
   function configured() {
     try { const url = new URL(config.apiUrl); return url.protocol === 'https:' && url.origin === config.apiUrl; }
@@ -63,7 +65,7 @@
     try { await refresh(force); } catch (e) { error = e.message; }
     await ready;
     return { configured: configured(), registered: Boolean(credential), installationId, credential,
-      balance: cached, pending: Object.keys(pending).length, error };
+      balance: cached, pending: Object.keys(pending).length, billingOperationPending: Boolean(billingOperation), error };
   }
   async function register(consent) {
     await ready;
@@ -113,12 +115,34 @@
     await reconcile();
     return !Object.hasOwn(pending, job.hostedRequestId);
   }
-  async function checkout() {
+  async function openStripe(path, data, origin) {
     await ready;
-    const result = await api('checkout', { checkoutId: crypto.randomUUID() });
-    if (new URL(result.url).origin !== 'https://checkout.stripe.com') throw new Error('Invalid payment URL.');
+    const result = await api(path, data, { signal: AbortSignal.timeout(30000) });
+    if (new URL(result.url).origin !== origin) throw new Error('Invalid payment URL.');
     await chrome.tabs.create({ url: result.url });
     return { opened: true };
+  }
+  async function checkout(planId) {
+    return openStripe('checkout', { checkoutId: crypto.randomUUID(), planId }, 'https://checkout.stripe.com');
+  }
+  async function portal() { return openStripe('billing-portal', {}, 'https://billing.stripe.com'); }
+  async function preview() { return api('subscription/preview', { planId: 'plus' }, { signal: AbortSignal.timeout(30000) }); }
+  async function change(action, quoteId) {
+    await ready;
+    const stored = (await chrome.storage.local.get('hostedBillingOperation')).hostedBillingOperation;
+    const data = stored && stored.action === action && stored.quoteId === quoteId ? stored : { action, quoteId, changeId: crypto.randomUUID() };
+    billingOperation = data;
+    await chrome.storage.local.set({ hostedBillingOperation: data });
+    const result = await api('subscription/change', data, { signal: AbortSignal.timeout(30000) });
+    await rememberBalance(result);
+    await chrome.storage.local.remove('hostedBillingOperation');
+    billingOperation = null;
+    return result;
+  }
+  async function retryChange() {
+    await ready;
+    if (!billingOperation) throw new Error('There is no billing change to retry.');
+    return change(billingOperation.action, billingOperation.quoteId);
   }
   async function restore(value) {
     await ready;
@@ -128,8 +152,10 @@
     credential = value;
     installationId = '';
     await chrome.storage.local.set({ hostedCredential: value, hostedInstallationId: '' });
+    await chrome.storage.local.remove('hostedBillingOperation');
+    billingOperation = null;
     await rememberBalance(valueBalance);
     return { restored: true };
   }
-  globalThis.ClickItHosted = { state, register, answer, complete, checkout, restore, refresh };
+  globalThis.ClickItHosted = { state, register, answer, complete, checkout, portal, preview, change, retryChange, restore, refresh };
 })();

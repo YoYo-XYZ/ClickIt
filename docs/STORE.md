@@ -12,7 +12,7 @@ Description:
 >
 > Keep the complete question and readable choices in view. On supported layouts, ClickIt selects the suggested answer. Some visual layouts receive a highlight to click manually. You submit and move to the next question yourself.
 >
-> The adult casual-quiz pilot includes 10 free suggestions. Optional top-ups cost US$4.99 for 500 credits, plus applicable tax, when purchases open after launch validation. Purchases are one-time and do not renew automatically. Failed requests, invalid responses, visibility failures, and rejected page changes do not consume credits. Valid suggestions can be wrong and can consume credits.
+> The adult casual-quiz pilot includes 10 free suggestions. Optional monthly subscriptions are Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits, plus applicable tax, when purchases open after launch validation. Subscriptions renew automatically until canceled. Failed requests, invalid responses, visibility failures, and rejected page changes do not consume credits. Valid suggestions can be wrong and can consume credits.
 >
 > Text mode sends the detected question and choices through ClickIt's hosted service and OpenRouter to TypeSafe's Jev model. Vision, when enabled after compatibility validation, sends a screenshot of the whole visible tab. Screenshots may include personal content. The pilot does not claim support for every quiz site or every Kahoot session. A page containing only colored shapes without the question and answer text is unsupported. Typed answers and multi-select questions are unsupported.
 >
@@ -20,7 +20,7 @@ Description:
 >
 > ClickIt uses temporary active-tab access when you invoke the extension. It does not submit quizzes or advance through questions automatically. Use it only for casual quizzes where assistance is permitted. The pilot is for users aged 18 or older.
 >
-> Credits have no scheduled expiry while the service operates. First-pack purchases have a seven-day satisfaction refund offer, subject to applicable consumer rights. If the service closes, unused purchased credits will be refunded after notice.
+> Monthly credits expire at the end of each billing period without rollover. Cancel any time to stop renewal and use remaining monthly credits until the paid period ends. Subscription payments are non-refundable except for billing errors or mandatory consumer rights. Existing free and legacy purchased credits keep their original terms.
 >
 > Support: thammatorn.j@gmail.com
 
@@ -63,4 +63,4 @@ Demonstration scripts to record after deployment:
 2. **Supported casual quiz, 15–20 seconds.** Use a session you control with the question and choices visible in the participant tab. Show one successful suggestion at real speed. Disclose if footage is edited.
 3. **Honest limitation, 10–15 seconds.** Show a screen containing only colored shapes, or a changed question while a request is pending. Show the failure message and unchanged credit balance.
 
-Prepare community posts around those demonstrations, the free trial, supported layouts, and the one-time price. Request feedback without incentivizing ratings or reviews. Publish or message only from accounts you control and in communities that permit promotion.
+Prepare community posts around those demonstrations, the free trial, supported layouts, and the monthly subscription prices. Request feedback without incentivizing ratings or reviews. Publish or message only from accounts you control and in communities that permit promotion.

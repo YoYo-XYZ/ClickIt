@@ -29,13 +29,16 @@ before(async () => {
     globalThis.serverCredits = 10;
     globalThis.hostedMock = { delay: 0, failCompletion: false, checkoutEnabled: false };
     globalThis.openedCheckouts = [];
+    globalThis.hostedChangeResults = {};
     const create = chrome.tabs.create.bind(chrome.tabs);
-    chrome.tabs.create = async options => { if (options.url.startsWith('https://checkout.stripe.com/')) { openedCheckouts.push(options.url); return {}; } return create(options); };
+    chrome.tabs.create = async options => { if (options.url.startsWith('https://checkout.stripe.com/') || options.url.startsWith('https://billing.stripe.com/')) { openedCheckouts.push(options.url); return {}; } return create(options); };
     globalThis.fetch = async (url, init = {}) => {
       const route = new URL(url).pathname;
       const body = init.body ? JSON.parse(init.body) : null;
       hostedCalls.push({ route, body, authorization: init.headers?.Authorization });
-      const balance = () => ({ credits: serverCredits, reserved: 0, checkoutEnabled: hostedMock.checkoutEnabled, visionEnabled: false });
+      const balance = () => ({ credits: serverCredits, reserved: 0, checkoutEnabled: hostedMock.checkoutEnabled, visionEnabled: false,
+        monthlyCredits: hostedMock.monthlyCredits || 0, otherCredits: serverCredits-(hostedMock.monthlyCredits || 0),
+        subscription: hostedMock.subscription || null, billingManagementAvailable: Boolean(hostedMock.subscription) });
       if (route === '/v1/installations') return Response.json({ credential: `ci_${'a'.repeat(64)}`, installationId: 'test-installation', ...balance() });
       if (route === '/v1/balance') return Response.json(balance());
       if (route === '/v1/answers/complete') {
@@ -44,6 +47,21 @@ before(async () => {
         return Response.json(balance());
       }
       if (route === '/v1/checkout') return Response.json({ url: 'https://checkout.stripe.com/c/pay_test' });
+      if (route === '/v1/billing-portal') return Response.json({ url: 'https://billing.stripe.com/p/session_test' });
+      if (route === '/v1/subscription/preview') return Response.json({ quoteId: 'test-quote', amount: 250, currency: 'usd', additionalCredits: 700,
+        periodEnd: Math.floor(Date.now()/1000)+86400, expiresAt: Date.now()+300000 });
+      if (route === '/v1/subscription/change') {
+        if (hostedChangeResults[body.changeId]) return Response.json(hostedChangeResults[body.changeId]);
+        if (body.action === 'upgrade') { hostedMock.subscription.planId='plus'; hostedMock.subscription.allowance=1200; serverCredits+=700; hostedMock.monthlyCredits+=700; }
+        if (body.action === 'downgrade') hostedMock.subscription.scheduledPlan='basic';
+        if (body.action === 'keep_plan') hostedMock.subscription.scheduledPlan=null;
+        if (body.action === 'cancel') hostedMock.subscription.cancelAtPeriodEnd=true;
+        if (body.action === 'resume') hostedMock.subscription.cancelAtPeriodEnd=false;
+        const result={ ...balance(), changed: true };
+        hostedChangeResults[body.changeId]=structuredClone(result);
+        if(hostedMock.loseChangeResponse){hostedMock.loseChangeResponse=false;throw new TypeError('Billing response lost');}
+        return Response.json(result);
+      }
       if (route === '/v1/answers') {
         await new Promise((resolve, reject) => {
           const timer = setTimeout(resolve, hostedMock.delay);
@@ -158,14 +176,16 @@ test('offline completion persists the settlement and retries instead of making a
   });
 });
 
-test('top-up opens only hosted Stripe checkout, and restore validates the access key with the server', async () => {
+test('subscription selection opens only hosted Stripe checkout, and restore validates the access key with the server', async () => {
   const controls = await popup();
   try {
     await worker.evaluate(async () => { hostedMock.checkoutEnabled = true; await ClickItHosted.state(true); });
     await controls.evaluate(() => refresh());
+    await controls.locator('#subscriptionPlan').selectOption('plus');
     await controls.locator('#buyCredits').click();
     await until(() => worker.evaluate(() => openedCheckouts.length === 1));
     assert.equal((await worker.evaluate(() => openedCheckouts))[0], 'https://checkout.stripe.com/c/pay_test');
+    assert.equal((await worker.evaluate(() => hostedCalls.find(c => c.route === '/v1/checkout'))).body.planId, 'plus');
     await controls.locator('#settingsToggle').click();
     await controls.locator('#accessRecovery summary').click();
     assert.equal(await controls.locator('#hostedAccessKey').inputValue(), token);
@@ -173,4 +193,61 @@ test('top-up opens only hosted Stripe checkout, and restore validates the access
     await until(async () => (await controls.locator('#message').textContent()).includes('restored'));
     await controls.locator('body').screenshot({ path: path.resolve(__dirname, '../test-results/hosted-settings.png') });
   } finally { await controls.close(); }
+});
+
+test('subscription controls preview upgrades before charging and manage renewals while checkout is disabled', async () => {
+  await worker.evaluate(async () => {
+    hostedCalls.length=0; serverCredits=210; hostedMock.monthlyCredits=200;
+    hostedMock.subscription={ planId:'basic', status:'active', allowance:500, periodEnd:Date.now()+86400000, cancelAtPeriodEnd:false, scheduledPlan:null, pendingUpgrade:false };
+    await ClickItHosted.state(true);
+  });
+  const controls = await popup();
+  try {
+    assert.equal(await controls.locator('#subscribeOptions').isHidden(), true);
+    assert.match(await controls.locator('#creditBreakdown').textContent(), /200 monthly credits/);
+    await controls.locator('#upgradePlan').click();
+    await controls.locator('#upgradeQuote').waitFor({ state:'visible' });
+    assert.match(await controls.locator('#upgradeQuoteText').textContent(), /700 credits/);
+    assert.equal((await worker.evaluate(() => hostedCalls.filter(c => c.route === '/v1/subscription/change'))).length, 0);
+    await controls.locator('#confirmUpgrade').click();
+    await until(async () => (await controls.locator('#creditBreakdown').textContent()).includes('900 monthly credits'));
+    await controls.locator('body').screenshot({ path:path.resolve(__dirname,'../test-results/hosted-subscription.png') });
+    await controls.locator('#downgradePlan').click();
+    await until(async () => (await controls.locator('#creditNote').textContent()).includes('renews on Basic'));
+    await controls.locator('#keepPlan').click();
+    await until(() => controls.locator('#keepPlan').isHidden());
+    await worker.evaluate(async () => { hostedMock.checkoutEnabled=false; await ClickItHosted.state(true); });
+    await controls.evaluate(() => refresh());
+    assert.equal(await controls.locator('#downgradePlan').isDisabled(), true);
+    assert.equal(await controls.locator('#manageSubscription').isDisabled(), false);
+    await controls.locator('#manageSubscription').click();
+    await until(() => worker.evaluate(() => openedCheckouts.includes('https://billing.stripe.com/p/session_test')));
+    await controls.locator('#cancelSubscription').click();
+    await until(async () => (await controls.locator('#creditNote').textContent()).includes('Automatic renewal is off'));
+    await controls.locator('#resumeSubscription').click();
+    await until(() => controls.locator('#resumeSubscription').isHidden());
+    assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth>innerWidth), false);
+  } finally { await controls.close(); }
+});
+
+test('reopening the popup can retry a lost billing response using the original change ID',async()=>{
+  await worker.evaluate(async()=>{
+    hostedCalls.length=0;serverCredits=210;hostedMock.monthlyCredits=200;hostedMock.checkoutEnabled=true;hostedMock.loseChangeResponse=true;
+    hostedMock.subscription={planId:'basic',status:'active',allowance:500,periodEnd:Date.now()+86400000,cancelAtPeriodEnd:false,scheduledPlan:null,pendingUpgrade:false};
+    await ClickItHosted.state(true);
+  });
+  let controls=await popup();
+  try{
+    await controls.locator('#upgradePlan').click();await controls.locator('#upgradeQuote').waitFor({state:'visible'});
+    await controls.locator('#confirmUpgrade').click();
+    await until(async()=>(await controls.locator('#message').textContent()).includes('Billing response lost'));
+    await controls.close();controls=await popup();
+    await controls.locator('#retryBilling').waitFor({state:'visible'});
+    await controls.locator('#retryBilling').click();
+    await until(()=>controls.locator('#retryBilling').isHidden());
+    assert.match(await controls.locator('#creditBreakdown').textContent(),/900 monthly credits/);
+    const changes=await worker.evaluate(()=>hostedCalls.filter(c=>c.route==='/v1/subscription/change'));
+    assert.equal(changes.length,2);assert.equal(changes[0].body.changeId,changes[1].body.changeId);
+    assert.equal(await worker.evaluate(()=>serverCredits),910);
+  }finally{await controls.close();}
 });
