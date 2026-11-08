@@ -287,13 +287,13 @@ export function billingService({ env, stripe, now, fail }) {
       }
       await stmt(db, 'UPDATE billing_accounts SET checkout_id=?,checkout_plan=?,checkout_session=NULL WHERE installation_id=?', attempt, plan.id, owner).run();
       const session = await stripe('checkout/sessions', {
-        mode: 'subscription', customer: account.customer_id, 'payment_method_types[0]': 'card',
-        'line_items[0][price]': prices[plan.id], 'line_items[0][quantity]': '1', client_reference_id: owner,
-        'metadata[clickit_checkout]': attempt, 'subscription_data[metadata][clickit_installation]': owner,
+        ui_mode: 'hosted_page', mode: 'subscription',
+        'line_items[0][price]': prices[plan.id], 'line_items[0][quantity]': '1',
         success_url: `${publicUrl()}/purchase.html`, cancel_url: `${publicUrl()}/purchase.html?cancelled=1`,
-        'consent_collection[terms_of_service]': 'required', billing_address_collection: 'required',
-        'automatic_tax[enabled]': env.STRIPE_AUTOMATIC_TAX === 'true' ? 'true' : 'false',
-        'custom_text[submit][message]': `${plan.name}: US$${(plan.amount/100).toFixed(2)}/month plus applicable tax. ${plan.credits} monthly credits expire at renewal. Renews automatically until canceled.`
+        billing_address_collection: 'auto', 'phone_number_collection[enabled]': 'false',
+        'automatic_tax[enabled]': 'false', allow_promotion_codes: 'false',
+        payment_method_collection: 'always', submit_type: 'auto',
+        integration_identifier: 'hosted_web_0002', origin_context: 'web'
       }, `subscription-checkout:${attempt}`);
       if (!/^cs_[A-Za-z0-9_]+$/.test(session.id || '') || new URL(session.url).origin !== 'https://checkout.stripe.com') fail(502, 'Unexpected checkout URL.');
       await stmt(db, `UPDATE billing_accounts SET checkout_session=?,checkout_url=?,checkout_expires_at=? WHERE installation_id=?`,
