@@ -14,7 +14,7 @@ Description:
 >
 > The adult casual-quiz pilot includes 10 free suggestions. Optional top-ups cost US$4.99 for 500 credits, plus applicable tax, when purchases open after launch validation. Purchases are one-time and do not renew automatically. Failed requests, invalid responses, visibility failures, and rejected page changes do not consume credits. Valid suggestions can be wrong and can consume credits.
 >
-> Text mode sends the detected question and choices through ClickIt's hosted service to TypeSafe. Vision, when enabled after compatibility validation, sends a screenshot of the whole visible tab. Screenshots may include personal content. The pilot does not claim support for every quiz site or every Kahoot session. A page containing only colored shapes without the question and answer text is unsupported. Typed answers and multi-select questions are unsupported.
+> Text mode sends the detected question and choices through ClickIt's hosted service and OpenRouter to TypeSafe's Jev model. Vision, when enabled after compatibility validation, sends a screenshot of the whole visible tab. Screenshots may include personal content. The pilot does not claim support for every quiz site or every Kahoot session. A page containing only colored shapes without the question and answer text is unsupported. Typed answers and multi-select questions are unsupported.
 >
 > Advanced users can use their own TypeSafe or OpenRouter API key, billed separately by that provider. Existing configured installations retain their API-key mode.
 >

@@ -42,7 +42,7 @@ The popup retains the last chosen answer or suggestion for each tab until the ex
 
 ### Hosted credits
 
-Configured version 3 releases default to included AI. Users explicitly confirm adult casual use and data processing before starting a 10-credit trial. Text questions or visible-tab screenshots are sent through ClickIt's Cloudflare Worker to TypeSafe. The backend keeps the provider key, authoritative balances, request metadata, and payment references. It does not store quiz content or screenshots. Hosted Vision remains disabled until its compatibility checks pass.
+Configured version 3 releases default to included AI. Users explicitly confirm adult casual use and data processing before starting a 10-credit trial. Text questions or visible-tab screenshots are sent through ClickIt's Cloudflare Worker and OpenRouter to TypeSafe's Jev model. The backend keeps the provider key, authoritative balances, request metadata, and payment references. It does not store quiz content or screenshots. Hosted Vision remains disabled until its compatibility checks pass.
 
 One valid suggestion costs one credit, including a highlight or an already-selected answer. Page changes, visibility failures, invalid responses, and failed requests release reservations. A valid but incorrect suggestion can consume a credit. A failed acknowledgment is saved in trusted extension storage for retry, with abandoned reservations expiring after two minutes. The backend's scheduled cleanup runs every five minutes.
 

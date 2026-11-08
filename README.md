@@ -2,7 +2,9 @@
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
-Version 3 adds a deployable hosted service with 10 free suggestions and optional US$4.99 / 500-credit top-ups. It is not connected to a live backend yet. Checkout and hosted Vision default to disabled until launch validation is complete.
+Version 3 includes a hosted service with 10 free suggestions and planned US$4.99 / 500-credit top-ups. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Checkout and hosted Vision remain disabled until launch validation is complete.
+
+For the configured local pilot, load `dist/extension` in Chrome. The backend currently allows that folder's development extension ID. The source `extension` folder remains an unconfigured development build. Publish the Chrome Web Store extension and configure its assigned origin before distributing it to customers.
 
 <p>
   <img src="docs/images/answer.png" width="300" align="top" alt="ClickIt with the Vision selector, Answer button, and status message">

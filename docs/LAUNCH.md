@@ -36,9 +36,11 @@ Copy the returned HTTPS workers.dev origin into `vars.PUBLIC_URL`. Keep `SUPPORT
 Add secrets through Wrangler's interactive input. Do not paste secret values into commands, tracked files, chat, screenshots, or logs:
 
 ```powershell
-npx wrangler secret put TYPESAFE_API_KEY --config server/wrangler.jsonc
+npx wrangler secret put OPENROUTER_API_KEY --config server/wrangler.jsonc
 npx wrangler secret put IP_HASH_SECRET --config server/wrangler.jsonc
 ```
+
+Use a dedicated OpenRouter key with a US$10 provider-side spending limit. No direct TypeSafe account or key is required. Hosted inference uses OpenRouter's Decisions endpoint and the fixed `typesafe/jev-1.14` model, with no direct-provider fallback.
 
 Use a randomly generated secret of at least 32 bytes for `IP_HASH_SECRET`. It hashes registration IP addresses for abuse control. Rotation changes the rate-limit identity for existing network addresses.
 
@@ -133,7 +135,9 @@ Enable `CHECKOUT_ENABLED=true` only when those checks are complete. No automatic
 
 ## 6. Operate within the spending limit
 
-The database starts with a US$10 global inference ceiling. Each request initially budgets the pinned model's 64,000-token maximum at $0.042/M, or $0.002688. When the response provides a valid `usage.input_tokens` value, cost is reconciled to actual input usage. Missing usage and network failures retain the conservative estimate. Token prices and context limits must be rechecked before switching models or updating this bound. Long-context input is not enabled.
+The database starts with a US$10 global inference ceiling. Migration `0002_openrouter_budget.sql` raises each new request's conservative cost hold to cover OpenRouter's listed 262,144-token context at $0.042/M, or $0.011010048. It preserves existing credit balances and historical inference costs. Apply this migration before deploying the OpenRouter Worker. The Worker supplies the new reservation explicitly; old Workers using the earlier default are not compatible with the new reservation trigger.
+
+When OpenRouter supplies a finite, nonnegative `usage.cost`, the ledger records that actual USD cost. Otherwise, valid input token usage is valued at $0.042/M. Missing usage and network failures retain the conservative estimate. Requests fix the model/provider and cap accepted prompt pricing at $0.042/M, with zero completion, per-request, and per-image charges. There is no direct TypeSafe fallback. Recheck token prices, routing behavior, and context limits before changing the model or this bound. See the [OpenRouter Decisions reference](https://openrouter.ai/docs/api/api-reference/alphadecisions/submit-a-decisions-request), [Jev pricing](https://openrouter.ai/typesafe/jev-1.14), and [routing price controls](https://openrouter.ai/docs/guides/routing/provider-selection).
 
 The application refuses new inference before a reservation would exceed the ceiling. This protects ClickIt's own inference path; it does not limit unrelated usage of the same provider key. Use a dedicated key and the provider's own spending controls as well. A budget pause preserves credits. Resolve the incident or replenish the budget deliberately before reopening requests. Cloudflare hosting and Stripe fees are separate from this inference counter.
 
@@ -165,7 +169,7 @@ npx wrangler d1 execute clickit --remote --config server/wrangler.jsonc --file .
 
 For eligible refunds, issue the refund in the Stripe Dashboard. The webhook revokes only the refunded purchase's credits, including after event replay. Record support time using a `support_actions` row associated with the installation. If webhook delivery failed, retry the event from Stripe after repairing the service.
 
-For an outage, disable `INFERENCE_ENABLED` and, if appropriate, `CHECKOUT_ENABLED`, redeploy, and post the status through the public page. Do not delete the database or overwrite balances. Back up D1 before migrations and use Cloudflare recovery facilities if needed. Restore a prior Worker version for code regressions; preserve payment webhooks and the existing ledger.
+For an outage, disable `INFERENCE_ENABLED` and, if appropriate, `CHECKOUT_ENABLED`, redeploy, and post the status through the public page. Do not delete the database or overwrite balances. Back up D1 before migrations and use Cloudflare recovery facilities if needed. Restore a compatible Worker version for code regressions; preserve payment webhooks and the existing ledger. Versions predating the OpenRouter migration need a compatible reservation trigger before rollback. Do not roll back to direct TypeSafe inference without an explicit provider decision and credentials.
 
 ## 8. First customers and later offers
 
@@ -181,3 +185,13 @@ Initial operating targets, not forecasts:
 - If 50 users reach five suggestions with no purchases, pause expansion and interview them about reliability, price, and need.
 
 At 30 buyers and five repeat purchases, test a separate US$9.99 / 1,200-credit offer. That future SKU is intentionally not accepted by the current fixed-pack fulfillment handler. Add it with explicit server-side product mapping and tests when the evidence justifies it. Consider subscriptions only after observed weekly use across four weeks. Explanations, history, teams, affiliate infrastructure, and broader assessment support remain deferred.
+# Pilot deployment status
+
+The pilot is deployed at https://clickit.thammatorn-clickit.workers.dev. OpenRouter inference is connected with a dedicated US$10 capped key and the application spending ceiling. A synthetic hosted request completed and settled one trial credit. This does not replace real quiz validation.
+
+Stripe test product, US$4.99 one-time price, and signed webhook are configured. Public checkout remains disabled. Stripe currently rejects Checkout creation because the account has no Terms of Service URL. In Stripe's public business details, set it to https://clickit.thammatorn-clickit.workers.dev/terms.html and verify the support email is thammatorn.j@gmail.com. The account reports that business onboarding is incomplete and charges are disabled. Complete owner verification before live payments. No live Stripe credentials are installed.
+
+Stripe API requests pin version 2024-06-20 to keep the card-only Checkout contract stable across account default upgrades. Test the full paid Checkout and refund journey after the Terms URL is configured. A signed connection probe was accepted and a forged signature was rejected, but neither probe represents a completed purchase.
+
+The configured local extension lives in `dist/extension`. Its development origin is allowed by the Worker. Add the published Chrome Web Store origin when available. Hosted Vision and public purchases remain gated on the launch checks below.
+

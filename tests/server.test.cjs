@@ -8,7 +8,8 @@ const path = require('node:path');
 // D1's batch() is transactional; this adapter preserves that contract.
 function database() {
   const sql = new DatabaseSync(':memory:');
-  sql.exec(fs.readFileSync(path.join(__dirname, '../server/migrations/0001_credits.sql'), 'utf8'));
+  const migrations = path.join(__dirname, '../server/migrations');
+  for (const name of fs.readdirSync(migrations).filter(n => n.endsWith('.sql')).sort()) sql.exec(fs.readFileSync(path.join(migrations, name), 'utf8'));
   const db = {
     sql,
     prepare(query) {
@@ -29,7 +30,7 @@ function database() {
   };
   return db;
 }
-const answer = { model: 'jev-1.14.0', usage: { input_tokens: 1000 }, answers: { answer: { type: 'choice', choice: 'a1', confidence: 0.97 } } };
+const answer = { model: 'typesafe/jev-1.14-20261014', usage: { input_tokens: 1000, cost: 0.000042 }, answers: { answer: { type: 'choice', choice: 'a1', confidence: 0.97 } } };
 async function setup(t, overrides = {}) {
   const { createWorker, sign } = await import('../server/worker.mjs');
   const db = database();
@@ -39,12 +40,12 @@ async function setup(t, overrides = {}) {
   const state = { provider: answer, status: 200, session: null, refunded: 0 };
   const env = { DB: db, TRIAL_ENABLED: 'true', INFERENCE_ENABLED: 'true', VISION_ENABLED: 'false',
     CHECKOUT_ENABLED: 'true', STRIPE_LIVE_MODE: 'false', IP_HASH_SECRET: 'test-ip-salt',
-    TYPESAFE_API_KEY: 'private-provider-secret', STRIPE_SECRET_KEY: 'private-stripe-secret',
+    OPENROUTER_API_KEY: 'private-provider-secret', STRIPE_SECRET_KEY: 'private-stripe-secret',
     STRIPE_WEBHOOK_SECRET: 'test-webhook-secret', STRIPE_PRICE_ID: 'price_pack', PUBLIC_URL: 'https://clickit.example',
     EXTENSION_ORIGINS: 'chrome-extension://test', ...overrides };
   const worker = createWorker({ now: () => time, fetchImpl: async (url, options) => {
     calls.push({ url, options });
-    if (url.includes('api.typesafe.ai')) {
+    if (url.includes('openrouter.ai')) {
       if (state.wait) await state.wait;
       if (state.throw) throw new Error('private screenshot upstream failure');
       return Response.json(state.provider, { status: state.status });
@@ -119,9 +120,11 @@ test('hosted requests use pinned server prompts, settle once, and reject a secon
   assert.equal(first.response.status, 200, JSON.stringify(first.body));
   assert.equal(first.body.result.index, 1);
   const upstream = JSON.parse(s.calls[0].options.body);
-  assert.equal(upstream.model, 'jev-1.14.0');
+  assert.equal(upstream.model, 'typesafe/jev-1.14');
   assert.equal(upstream.questions.answer.instructions.includes('ignore the quiz'), false);
-  assert.equal(s.calls[0].url, 'https://api.typesafe.ai/v1/systemone');
+  assert.equal(s.calls[0].url, 'https://openrouter.ai/api/alpha/decisions');
+  assert.deepEqual(upstream.provider, { only:['typesafe'], allow_fallbacks:false, max_price:{prompt:.042,completion:0,request:0,image:0} });
+  assert.equal(s.calls[0].options.headers.Authorization, 'Bearer private-provider-secret');
   assert.equal((await s.solve(user.credential)).response.status, 409);
   assert.equal((await s.solve(user.credential, first.requestId)).response.status, 409);
   let current = await (await s.req('balance', undefined, user.credential)).json();
@@ -154,7 +157,7 @@ test('page rejection, invalid results, upstream errors, and expiry return credit
   assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 10);
   await s.req('answers/complete', { requestId: abandoned.requestId, delivered: true }, user.credential);
   assert.equal(s.db.sql.prepare('SELECT consumed FROM credit_lots').get().consumed, 0);
-  assert.ok(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano >= 5376000);
+  assert.ok(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano >= 22020096);
 });
 
 test('atomic SQL guards prevent overspend, early settlement, and cross-installation completion', async t => {
@@ -179,7 +182,7 @@ test('atomic SQL guards prevent overspend, early settlement, and cross-installat
 test('global budget, request limits, disabled Vision, gates, and payload bounds stop before inference', async t => {
   const s = await setup(t);
   const user = await s.register();
-  s.db.sql.exec('UPDATE budget SET limit_nano=2687999');
+  s.db.sql.exec('UPDATE budget SET limit_nano=11010047');
   assert.equal((await s.solve(user.credential)).response.status, 503);
   assert.equal(s.calls.length, 0);
   assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 10);
@@ -201,6 +204,7 @@ test('Checkout fixes price and quantity, grants once through signed webhooks wit
   assert.equal((await s.purchase(user)).status, 200);
   const checkout = s.calls.find(c => c.url.endsWith('/checkout/sessions'));
   const form = new URLSearchParams(checkout.options.body);
+  assert.equal(checkout.options.headers['Stripe-Version'], '2024-06-20');
   assert.equal(form.get('line_items[0][price]'), 'price_pack');
   assert.equal(form.get('line_items[0][quantity]'), '1');
   assert.equal(form.get('client_reference_id'), user.installationId);
@@ -291,7 +295,7 @@ test('enabled hosted Vision constructs its own image request and visibility fail
   const s = await setup(t, { VISION_ENABLED: 'true' });
   const user = await s.register();
   const region = box => ({ type: 'box', confidence: .95, box });
-  s.state.provider = { model: 'jev-1.14.0', usage: { input_tokens: 2000 }, answers: {
+  s.state.provider = { model: 'typesafe/jev-1.14', usage: { input_tokens: 2000 }, answers: {
     ready: { type: 'noul', noul: .9 },
     question: region({ left:.1, top:.1, right:.9, bottom:.3 }),
     choices: region({ left:.1, top:.4, right:.9, bottom:.9 }),
@@ -302,7 +306,8 @@ test('enabled hosted Vision constructs its own image request and visibility fail
   const response = await s.req('answers', input, user.credential);
   assert.equal(response.status, 200);
   assert.ok((await response.json()).result.boxes.target);
-  assert.equal(s.calls[0].options.headers['TypeSafe-Danger-Zone-Images'], 'true');
+  assert.equal(s.calls[0].options.headers['TypeSafe-Danger-Zone-Images'], undefined);
+  assert.equal(s.calls[0].url, 'https://openrouter.ai/api/alpha/decisions');
   const upstream = JSON.parse(s.calls[0].options.body);
   assert.equal(Object.values(upstream.assets)[0].data_base64, input.image);
   assert.equal(upstream.questions.target.instructions.includes('untrusted prompt'), false);
@@ -310,4 +315,26 @@ test('enabled hosted Vision constructs its own image request and visibility fail
   s.state.provider.answers.ready.noul = .2;
   assert.equal((await s.req('answers', { ...input, requestId:crypto.randomUUID() }, user.credential)).status, 422);
   assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 9);
+});
+
+test('OpenRouter reported cost takes precedence over token estimates, with bounded-token fallback', async t => {
+  const s = await setup(t);
+  const user = await s.register();
+  s.state.provider = structuredClone(answer);
+  s.state.provider.usage = { input_tokens: 1000, cost: .000123456 };
+  const first = await s.solve(user.credential);
+  assert.equal(first.response.status, 200);
+  assert.equal(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano, 123456);
+  await s.req('answers/complete', { requestId: first.requestId, delivered:false }, user.credential);
+  s.state.provider.usage = { input_tokens: 262144 };
+  const second = await s.solve(user.credential);
+  assert.equal(second.response.status, 200);
+  assert.equal(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano, 11133504);
+});
+
+test('hosted requests never fall back to a direct TypeSafe credential', async t => {
+  const s = await setup(t, { OPENROUTER_API_KEY:'', TYPESAFE_API_KEY:'unused-old-secret' });
+  const user = await s.register();
+  assert.equal((await s.solve(user.credential)).response.status, 503);
+  assert.equal(s.calls.length, 0);
 });

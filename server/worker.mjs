@@ -1,7 +1,7 @@
 import '../extension/core.js';
 const C = globalThis.ClickIt;
 const MAX_BODY = 3_000_000;
-const RESERVE_NANO = 2_688_000; // 64k input tokens at $0.042/M. No long-context header.
+const RESERVE_NANO = 11_010_048; // OpenRouter's 262,144-token context at the capped $0.042/M input price.
 const encoder = new TextEncoder();
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 class HttpError extends Error {
@@ -77,12 +77,12 @@ function requestData(data, env) {
     let question;
     try { question = C.validateQuestion(data.question); } catch { fail(400, 'Invalid quiz question or choices.'); }
     if (JSON.stringify(question).length > 60000) fail(413, 'Question is too large.');
-    return { body: C.requestBody(question), count: question.options.length, mode: 'text' };
+    return { body: C.requestBody(question, 'openrouter'), count: question.options.length, mode: 'text' };
   }
   if (data.mode === 'vision') {
     if (env.VISION_ENABLED !== 'true') fail(403, 'Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
     if (typeof data.image !== 'string' || data.image.length > 2_800_000 || !/^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(data.image)) fail(400, 'A resized PNG screenshot is required.');
-    return { body: C.visionRequest(data.image, 'typesafe'), mode: 'vision' };
+    return { body: C.visionRequest(data.image, 'openrouter'), mode: 'vision' };
   }
   fail(400, 'Choose Text or Vision mode.');
 }
@@ -90,6 +90,7 @@ async function stripe(fetchImpl, env, path, form, key) {
   if (!env.STRIPE_SECRET_KEY) fail(503, 'Payments are not configured.');
   const response = await fetchImpl(`https://api.stripe.com/v1/${path}`, {
     method: form ? 'POST' : 'GET', headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Stripe-Version': '2024-06-20',
       ...(form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
       ...(key ? { 'Idempotency-Key': key } : {}) },
     ...(form ? { body: new URLSearchParams(form).toString() } : {}), signal: AbortSignal.timeout(10000)
@@ -243,17 +244,19 @@ async function route(request, env, url, fetchImpl, now) {
     return json({ url: session.url });
   }
   if (request.method === 'POST' && url.pathname === '/v1/answers') {
-    if (env.INFERENCE_ENABLED !== 'true' || !env.TYPESAFE_API_KEY) fail(503, 'Hosted answers are paused. Your balance is unchanged.');
+    if (env.INFERENCE_ENABLED !== 'true' || !env.OPENROUTER_API_KEY) fail(503, 'Hosted answers are paused. Your balance is unchanged.');
     const data = await bodyJSON(request);
     const input = requestData(data, env);
+    input.body.provider = { only: ['typesafe'], allow_fallbacks: false,
+      max_price: { prompt: 0.042, completion: 0, request: 0, image: 0 } };
     const previous = await stmt(db, 'SELECT status FROM requests WHERE id=?', data.requestId).first();
     if (previous) fail(409, 'This request was already received. Refresh your balance before trying again.');
     const recent = await stmt(db, 'SELECT COUNT(*) AS n FROM requests WHERE installation_id=? AND created_at>?', id, now - 60000).first();
     if (recent.n >= 20) fail(429, 'Please wait before answering more questions.');
     try {
-      const result = await stmt(db, `INSERT INTO requests(id,installation_id,lot_id,mode,created_at,expires_at)
-        SELECT ?,?,id,?,?,? FROM credit_lots WHERE installation_id=? AND granted-revoked-consumed-reserved>0 ORDER BY created_at,id LIMIT 1`,
-      data.requestId, id, input.mode, now, now + 120000, id).run();
+      const result = await stmt(db, `INSERT INTO requests(id,installation_id,lot_id,mode,created_at,expires_at,cost_nano)
+        SELECT ?,?,id,?,?,?,? FROM credit_lots WHERE installation_id=? AND granted-revoked-consumed-reserved>0 ORDER BY created_at,id LIMIT 1`,
+      data.requestId, id, input.mode, now, now + 120000, RESERVE_NANO, id).run();
       if (!result.meta.changes) fail(402, 'No credits left. Top up to continue.');
     } catch (error) {
       if (error instanceof HttpError) throw error;
@@ -265,21 +268,24 @@ async function route(request, env, url, fetchImpl, now) {
     await stmt(db, 'UPDATE installations SET last_seen_at=? WHERE id=?', now, id).run();
     const started = Date.now();
     try {
-      const response = await fetchImpl(C.providers.typesafe.endpoint, {
-        method: 'POST', headers: { Authorization: `Bearer ${env.TYPESAFE_API_KEY}`, 'Content-Type': 'application/json',
-          ...(input.mode === 'vision' ? { 'TypeSafe-Danger-Zone-Images': 'true' } : {}) },
+      const response = await fetchImpl(C.providers.openrouter.endpoint, {
+        method: 'POST', headers: { Authorization: `Bearer ${env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(input.body), signal: AbortSignal.timeout(15000), credentials: 'omit'
       });
       // Provider errors might contain billable usage. Missing usage retains the conservative reserve.
       let result;
       try { result = JSON.parse(await readBody(response, 256000)); } catch { result = null; }
       const tokens = result?.usage?.input_tokens;
-      const measured = Number.isSafeInteger(tokens) && tokens >= 0 && tokens <= 64000;
+      const measured = Number.isSafeInteger(tokens) && tokens >= 0 && tokens <= 262144;
+      const cost = result?.usage?.cost;
+      const reportedCost = typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 &&
+        Number.isSafeInteger(Math.ceil(cost * 1e9));
       await stmt(db, `UPDATE requests SET cost_nano=?, cost_final=1, input_tokens=?, api_ms=? WHERE id=? AND cost_final=0`,
-        measured ? Math.ceil(tokens * 42) : RESERVE_NANO, measured ? tokens : null, Date.now() - started, data.requestId).run();
+        reportedCost ? Math.ceil(cost * 1e9) : measured ? Math.ceil(tokens * 42) : RESERVE_NANO,
+        measured ? tokens : null, Date.now() - started, data.requestId).run();
       if (!response.ok) fail(response.status === 429 ? 429 : 502, 'AI provider could not answer. No credit consumed.');
       let parsed;
-      try { parsed = input.mode === 'vision' ? C.parseVision(result, 'typesafe') : C.parseAnswer(result, input.count, 'typesafe'); }
+      try { parsed = input.mode === 'vision' ? C.parseVision(result, 'openrouter') : C.parseAnswer(result, input.count, 'openrouter'); }
       catch (error) { fail(422, error.message); }
       const changed = await stmt(db, `UPDATE requests SET status='ready' WHERE id=? AND status='reserved' AND expires_at>?`, data.requestId, Date.now()).run();
       if (!changed.meta.changes) fail(409, 'Request expired. No credit consumed.');

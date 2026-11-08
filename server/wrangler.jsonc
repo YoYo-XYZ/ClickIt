@@ -1,23 +1,43 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "clickit",
+  "account_id": "4c6bfb27d954b7c7451949f6b8c2b9de",
   "main": "worker.mjs",
   "compatibility_date": "2026-11-01",
-  "assets": { "directory": "../site", "binding": "ASSETS", "run_worker_first": ["/v1/*"] },
-  "d1_databases": [{ "binding": "DB", "database_name": "clickit", "database_id": "REPLACE_WITH_D1_DATABASE_ID", "migrations_dir": "migrations" }],
-  "triggers": { "crons": ["*/5 * * * *"] },
-  "observability": { "enabled": false },
+  "assets": {
+    "directory": "../site",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/v1/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clickit",
+      "database_id": "c3110ba4-0777-4e45-b57d-077eccf9f88a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": false
+  },
   "vars": {
-    "PUBLIC_URL": "https://REPLACE_WITH_WORKER_HOST",
+    "PUBLIC_URL": "https://clickit.thammatorn-clickit.workers.dev",
     "SUPPORT_URL": "mailto:thammatorn.j@gmail.com",
     "STORE_URL": "",
-    "EXTENSION_ORIGINS": "",
-    "TRIAL_ENABLED": "false",
-    "INFERENCE_ENABLED": "false",
+    "EXTENSION_ORIGINS": "chrome-extension://dkoabbnhhchhppmdjjnchaodddkekhjc",
+    "TRIAL_ENABLED": "true",
+    "INFERENCE_ENABLED": "true",
     "VISION_ENABLED": "false",
     "CHECKOUT_ENABLED": "false",
     "STRIPE_LIVE_MODE": "false",
     "STRIPE_AUTOMATIC_TAX": "false",
-    "STRIPE_PRICE_ID": ""
+    "STRIPE_PRICE_ID": "price_1UZAnpDC5PkZdLhQsxqCeEyU"
   }
 }
