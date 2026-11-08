@@ -18,13 +18,13 @@ h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.6px; }
 .mode-control { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; min-width: 0; margin: 0; padding: 4px; border: 1px solid #35414f; border-radius: 12px; background: #1b242f; }
 .mode-option { position: relative; cursor: pointer; }
 .mode-option input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
-.mode-option span { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 12px; border-radius: 8px; color: #abb8c8; font-weight: 600; transition: color .15s; }
+.mode-option span { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 12px; border-radius: 8px; color: #abb8c8; font-weight: 600; }
 .mode-option input:checked + span { color: #9becce; }
 .mode-option input:not(:checked):not(:disabled) + span:hover { color: #edf3f5; }
 .mode-option input:focus-visible + span { outline: 2px solid #9becce; outline-offset: 2px; }
 .mode-control:disabled { opacity: .55; }
 button { border: 0; }
-button:disabled, select:disabled { opacity: .55; cursor: wait; }
+button:disabled, select:disabled { opacity: .55; cursor: default; }
 #answerNow { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 184px; padding: 24px 20px; border: 1px solid #345f51; border-radius: 16px; background: linear-gradient(135deg, #243f38, #192c2b); color: #f1faf6; transition: border-color .15s, background .15s; }
 #answerNow:hover:not(:disabled) { border-color: #8bd8b9; background: #28493e; }
 .answer-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #9becce; color: #193c31; }

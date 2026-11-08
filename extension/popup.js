@@ -2,6 +2,7 @@ const $ = id => document.getElementById(id);
 let loaded = false, sending = false, running = false;
 let saved;
 let hosted;
+let modeSave = null;
 function selectedMode() {
   return document.querySelector('input[name="mode"]:checked').value;
 }
@@ -100,21 +101,32 @@ async function refresh(initial = false) {
 }
 $('provider').addEventListener('change', showProvider);
 $('billingMode').addEventListener('change', showBilling);
-$('mode').addEventListener('change', async () => {
-  sending = true; controls();
-  try {
-    const next = { ...saved, mode: selectedMode() };
-    await send({ type: 'save', settings: next });
-    saved = next;
-    $('message').textContent = '';
-  } catch (error) { selectMode(saved.mode); $('message').textContent = error.message; }
-  finally { sending = false; controls(); }
+async function saveMode() {
+  while (selectedMode() !== saved.mode) {
+    const mode = selectedMode();
+    try {
+      const next = { ...saved, mode };
+      await send({ type: 'save', settings: next });
+      saved = next;
+      $('message').textContent = '';
+    } catch (error) {
+      if (selectedMode() !== mode) continue;
+      selectMode(saved.mode);
+      showPrompt();
+      $('message').textContent = error.message;
+      return;
+    }
+  }
+}
+$('mode').addEventListener('change', () => {
   showPrompt();
+  if (!modeSave) modeSave = saveMode().finally(() => { modeSave = null; });
 });
 $('settings').addEventListener('submit', async event => {
   event.preventDefault();
   sending = true; controls();
   try {
+    await modeSave;
     const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, key === 'mode' ? selectedMode() : $(key).value])));
     await send({ type: 'save', settings });
     saved = settings;
@@ -130,6 +142,7 @@ $('answerNow').addEventListener('click', async () => {
   sending = true; controls();
   $('message').textContent = '';
   try {
+    await modeSave;
     await send({ type: 'answer' });
     await refresh();
   } catch (error) {
@@ -142,6 +155,7 @@ async function accountAction(message) {
   if (sending || running) return;
   sending = true; controls();
   try {
+    await modeSave;
     await send(message);
     $('message').textContent = message.type === 'restoreAccess' ? 'Credit access restored.' : '';
     await refresh();

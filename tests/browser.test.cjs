@@ -398,6 +398,74 @@ async function mockVision(page, mutate = body => body) {
   await worker.evaluate(body => { mock.body = body; }, mutate(await visionResponse(page)));
 }
 
+test('mode switches stay responsive during slow saves and persist the final choice before answering', async () => {
+  await configure({ mode: 'text' });
+  const controls = await popup();
+  try {
+    await controls.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      globalThis.modeRequests = [];
+      globalThis.answerModes = [];
+      globalThis.disabledChanges = [];
+      new MutationObserver(records => {
+        disabledChanges.push(...records.map(record => record.target.id));
+      }).observe(document.querySelector('body'), { subtree: true, attributes: true, attributeFilter: ['disabled'] });
+      chrome.runtime.sendMessage = async message => {
+        if (message.type === 'save') {
+          modeRequests.push(message.settings.mode);
+          await new Promise(resolve => { globalThis.releaseModeSave = resolve; });
+        }
+        if (message.type === 'answer') {
+          answerModes.push((await original({ type: 'inspect' })).data.settings.mode);
+          return { ok: true };
+        }
+        return original(message);
+      };
+    });
+    const vision = controls.getByRole('radio', { name: 'Vision', exact: true });
+    const text = controls.getByRole('radio', { name: 'Text', exact: true });
+    const initialBox = await controls.locator('#mode').boundingBox();
+    await vision.check();
+    await controls.waitForFunction(() => modeRequests.length === 1);
+    assert.equal(await vision.isEnabled(), true);
+    assert.equal(await controls.getByRole('button', { name: 'Answer', exact: true }).isEnabled(), true);
+    assert.equal(await controls.locator('#visionPrompt').evaluate(el => el.hidden), false);
+    assert.deepEqual(await controls.locator('#mode').boundingBox(), initialBox);
+    assert.deepEqual(await controls.evaluate(() => disabledChanges), []);
+    assert.equal(await controls.locator('#mode').evaluate(el => getComputedStyle(el).opacity), '1');
+    await text.check();
+    await vision.check();
+    await text.check();
+    assert.equal(await text.isChecked(), true);
+    await controls.evaluate(() => releaseModeSave());
+    await controls.waitForFunction(() => modeRequests.length === 2);
+    assert.deepEqual(await controls.evaluate(() => modeRequests), ['vision', 'text']);
+    await controls.getByRole('button', { name: 'Answer', exact: true }).click();
+    assert.deepEqual(await controls.evaluate(() => answerModes), []);
+    await controls.evaluate(() => releaseModeSave());
+    await controls.waitForFunction(() => answerModes.length === 1);
+    assert.deepEqual(await controls.evaluate(() => answerModes), ['text']);
+    assert.equal(await worker.evaluate(() => settings.mode), 'text');
+  } finally { await controls.close(); }
+});
+
+test('a failed mode save restores the saved selection and prompt', async () => {
+  await configure({ mode: 'text' });
+  const controls = await popup();
+  try {
+    await controls.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      chrome.runtime.sendMessage = message => message.type === 'save'
+        ? Promise.resolve({ ok: false, error: 'Mode save failed.' }) : original(message);
+    });
+    await controls.getByRole('radio', { name: 'Vision', exact: true }).click();
+    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Mode save failed.');
+    assert.equal(await controls.getByRole('radio', { name: 'Text', exact: true }).isChecked(), true);
+    assert.equal(await controls.locator('#textPrompt').evaluate(el => el.hidden), false);
+    assert.equal(await worker.evaluate(() => settings.mode), 'text');
+  } finally { await controls.close(); }
+});
+
 test('Vision reads a real screenshot where Text detection fails, makes one click, and sends no extracted HTML', async () => {
   await configure();
   await scenario(visionFixture, async (page, controls) => {
