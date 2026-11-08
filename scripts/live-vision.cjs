@@ -29,7 +29,7 @@ async function main() {
     await session.send('Extensions.triggerAction', { id: extensionId, targetId: targetInfos.find(target => target.url === page.url()).targetId });
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await popup.waitForFunction(() => document.getElementById('timeoutMs').value !== '');
+    await popup.waitForFunction(() => !document.getElementById('saveSettings').disabled);
     const save = await popup.evaluate(settings => chrome.runtime.sendMessage({ type: 'save', settings }), {
       mode: 'vision', provider, apiKey, timeoutMs: 15000, minConfidence: 0
     });

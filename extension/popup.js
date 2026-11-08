@@ -88,7 +88,7 @@ async function refresh(initial = false) {
       saved = data.settings;
       for (const key of Object.keys(ClickIt.defaults)) {
         if (key === 'mode') selectMode(data.settings.mode);
-        else $(key).value = data.settings[key];
+        else if ($(key)) $(key).value = data.settings[key];
       }
       loaded = true;
       showProvider();
@@ -127,7 +127,7 @@ $('settings').addEventListener('submit', async event => {
   sending = true; controls();
   try {
     await modeSave;
-    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, key === 'mode' ? selectedMode() : $(key).value])));
+    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, key === 'mode' ? selectedMode() : ($(key)?.value ?? saved[key])])));
     await send({ type: 'save', settings });
     saved = settings;
     $('apiKey').value = settings.apiKey;

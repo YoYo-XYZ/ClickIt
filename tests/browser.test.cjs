@@ -51,7 +51,7 @@ async function popup() {
   const page = await context.newPage();
   await page.setViewportSize({ width: 360, height: 520 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.waitForFunction(() => document.getElementById('timeoutMs').value !== '');
+  await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
   return page;
 }
 async function configure(overrides = {}, response = {}) {
@@ -315,19 +315,19 @@ test('authentication errors do not echo provider response bodies or secrets', as
 });
 
 test('popup saves lean settings, shows only the latest answer, and keeps it on reopening', async () => {
-  await configure();
+  await configure({ minConfidence: 0.3, timeoutMs: 5000 });
   await scenario(fixture, async (page, controls) => {
     assert.equal(await controls.locator('#autopilot,#answerBank').count(), 0);
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
     assert.equal(await controls.locator('#settingsToggle').getAttribute('aria-expanded'), 'true');
     assert.equal(await controls.locator('#answerNow').isVisible(), false);
     await controls.screenshot({ path: path.resolve(__dirname, '../test-results/popup-settings.png'), fullPage: true });
-    await controls.locator('#minConfidence').fill('0.3');
+    assert.equal(await controls.locator('#minConfidence,#timeoutMs').count(), 0);
     await controls.getByRole('button', { name: 'Save settings' }).click();
     await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
     assert.equal(await controls.locator('#settingsPanel').isVisible(), false);
     assert.equal(await controls.locator('#answerNow').isVisible(), true);
-    assert.equal(await worker.evaluate(() => settings.minConfidence), 0.3);
+    assert.deepEqual(await worker.evaluate(() => [settings.minConfidence, settings.timeoutMs]), [0.3, 5000]);
     await page.bringToFront();
     await controls.evaluate(() => document.getElementById('answerNow').click());
     await finished(page);
