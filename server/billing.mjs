@@ -293,7 +293,7 @@ export function billingService({ env, stripe, now, fail }) {
         billing_address_collection: 'auto', 'phone_number_collection[enabled]': 'false',
         'automatic_tax[enabled]': 'false', allow_promotion_codes: 'false',
         payment_method_collection: 'always', submit_type: 'auto',
-        integration_identifier: 'hosted_web_0002', origin_context: 'web'
+        integration_identifier: 'hosted_web_0003', origin_context: 'web'
       }, `subscription-checkout:${attempt}`);
       if (!/^cs_[A-Za-z0-9_]+$/.test(session.id || '') || new URL(session.url).origin !== 'https://checkout.stripe.com') fail(502, 'Unexpected checkout URL.');
       await stmt(db, `UPDATE billing_accounts SET checkout_session=?,checkout_url=?,checkout_expires_at=? WHERE installation_id=?`,
