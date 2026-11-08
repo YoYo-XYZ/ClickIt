@@ -2,6 +2,12 @@ const $ = id => document.getElementById(id);
 let loaded = false, sending = false, running = false;
 let saved;
 let hosted;
+function selectedMode() {
+  return document.querySelector('input[name="mode"]:checked').value;
+}
+function selectMode(value) {
+  for (const input of document.querySelectorAll('input[name="mode"]')) input.checked = input.value === value;
+}
 async function send(message) {
   const reply = await chrome.runtime.sendMessage(message);
   if (!reply?.ok) throw new Error(reply?.error || 'Extension unavailable.');
@@ -45,14 +51,14 @@ function showProvider() {
   $('keyLabel').textContent = `${ClickIt.providers[$('provider').value].name} API key`;
 }
 function showPrompt() {
-  const vision = $('mode').value === 'vision';
+  const vision = selectedMode() === 'vision';
   $('textPrompt').hidden = vision;
   $('visionPrompt').hidden = !vision;
   $('promptLabel').textContent = vision ? 'Vision prompt' : 'Text prompt';
   $('promptLabel').htmlFor = vision ? 'visionPrompt' : 'textPrompt';
 }
 $('resetPrompt').addEventListener('click', () => {
-  const key = `${$('mode').value}Prompt`;
+  const key = `${selectedMode()}Prompt`;
   $(key).value = ClickIt.defaults[key];
 });
 function showSettings(open) {
@@ -79,7 +85,10 @@ async function refresh(initial = false) {
     $('timing').textContent = action ? `${action.totalMs} ms · ${action.apiMs} ms API` : '';
     if (initial) {
       saved = data.settings;
-      for (const key of Object.keys(ClickIt.defaults)) $(key).value = data.settings[key];
+      for (const key of Object.keys(ClickIt.defaults)) {
+        if (key === 'mode') selectMode(data.settings.mode);
+        else $(key).value = data.settings[key];
+      }
       loaded = true;
       showProvider();
       showPrompt();
@@ -94,11 +103,11 @@ $('billingMode').addEventListener('change', showBilling);
 $('mode').addEventListener('change', async () => {
   sending = true; controls();
   try {
-    const next = { ...saved, mode: $('mode').value };
+    const next = { ...saved, mode: selectedMode() };
     await send({ type: 'save', settings: next });
     saved = next;
     $('message').textContent = '';
-  } catch (error) { $('mode').value = saved.mode; $('message').textContent = error.message; }
+  } catch (error) { selectMode(saved.mode); $('message').textContent = error.message; }
   finally { sending = false; controls(); }
   showPrompt();
 });
@@ -106,7 +115,7 @@ $('settings').addEventListener('submit', async event => {
   event.preventDefault();
   sending = true; controls();
   try {
-    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, $(key).value])));
+    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, key === 'mode' ? selectedMode() : $(key).value])));
     await send({ type: 'save', settings });
     saved = settings;
     $('apiKey').value = settings.apiKey;

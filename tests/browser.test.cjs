@@ -404,8 +404,17 @@ test('Vision reads a real screenshot where Text detection fails, makes one click
     await start(page, controls);
     assert.match((await finished(page)).text, /unsupported/);
     assert.equal((await calls()).length, 0);
-    await controls.locator('#mode').selectOption('vision');
+    const visionToggle = controls.getByRole('radio', { name: 'Vision', exact: true });
+    const textToggle = controls.getByRole('radio', { name: 'Text', exact: true });
+    await visionToggle.check();
     await until(() => worker.evaluate(() => settings.mode === 'vision'));
+    await visionToggle.focus();
+    await visionToggle.press('ArrowLeft');
+    await until(() => worker.evaluate(() => settings.mode === 'text'));
+    assert.equal(await textToggle.isChecked(), true);
+    await textToggle.press('ArrowRight');
+    await until(() => worker.evaluate(() => settings.mode === 'vision'));
+    assert.equal(await visionToggle.isChecked(), true);
     await mockVision(page);
     await start(page, controls);
     assert.equal((await finished(page)).answer, '4');
@@ -427,8 +436,8 @@ test('Vision reads a real screenshot where Text detection fails, makes one click
     assert.equal(await worker.evaluate(() => captures.length), 1);
     const reopened = await popup();
     try {
-      assert.equal(await reopened.locator('#mode').inputValue(), 'vision');
-      assert.equal(await reopened.getByRole('combobox', { name: 'Read question using' }).inputValue(), 'vision');
+      assert.equal(await reopened.getByRole('radio', { name: 'Vision', exact: true }).isChecked(), true);
+      assert.equal(await reopened.getByRole('radio', { name: 'Text', exact: true }).isChecked(), false);
       await reopened.screenshot({ path: path.resolve(__dirname, '../test-results/vision-popup.png'), fullPage: true });
     } finally { await reopened.close(); }
     await page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; });
