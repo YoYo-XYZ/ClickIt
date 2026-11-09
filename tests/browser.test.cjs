@@ -596,50 +596,47 @@ test('Vision maps resized, padded, and high-DPI screenshots to the correct page 
   }
 });
 
-test('Vision tolerates countdowns, identical replacements, small layout shifts, and unrelated interaction', async () => {
+test('Vision ignores a countdown outside the question and answer regions', async () => {
+  await configure({ mode: 'vision' }, { delay: 200 });
+  await scenario(visionFixture, async (page, controls) => {
+    await mockVision(page);
+    await start(page, controls);
+    await until(async () => (await calls()).length === 1);
+    await page.evaluate(() => { window.tick = setInterval(() => { document.getElementById('timer').textContent = String(Math.random()); }, 30); });
+    assert.equal((await finished(page)).answer, '4');
+    await page.evaluate(() => clearInterval(window.tick));
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+  });
+});
+
+test('Vision allows cosmetic stylesheet and page-attribute updates during inference', async () => {
   const changes = [
-    page => page.evaluate(() => {
-      const timer = document.getElementById('timer');
-      timer.replaceWith(timer.cloneNode(true));
-      document.getElementById('question').textContent = 'What is 2 + 2?';
-      document.body.setAttribute('data-slide-id', 'render-2');
-    }),
-    page => page.evaluate(() => {
-      const option = document.getElementById('option4');
-      option.replaceWith(option.cloneNode(true));
-    }),
-    page => page.evaluate(() => { document.getElementById('option4').style.transform = 'translateX(0.5px)'; }),
-    page => page.evaluate(() => { document.getElementById('timer').textContent = '19'; }),
-    async page => {
-      await page.keyboard.press('Shift');
-      await page.locator('#timer').click();
-      await page.evaluate(() => scrollTo(0, 1));
-      await page.setViewportSize({ width: 1281, height: 721 });
-    }
+    () => { document.querySelector('style').textContent += '\n#timer { color: red; }'; },
+    () => { document.querySelector('style').textContent += '\n#question { color: red; } #choices button:hover { background: yellow; }'; },
+    () => { document.body.setAttribute('data-countdown', '19'); }
   ];
   for (const change of changes) {
-    await configure({ mode: 'vision' }, { delay: 400 });
+    await configure({ mode: 'vision' }, { delay: 200 });
     await scenario(visionFixture, async (page, controls) => {
-      await mockVision(page, body => {
-        // The question box can include the countdown without making its updates fatal.
-        body.answers.question.box = { left: 0, top: 0, right: 1, bottom: 0.3 };
-        return body;
-      });
+      await mockVision(page);
       await start(page, controls);
       await until(async () => (await calls()).length === 1);
-      await change(page);
+      await page.evaluate(change);
       const result = await finished(page);
       assert.equal(result.answer, '4', result.text);
       assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-      assert.equal(await page.evaluate(() => submissions), 0);
-      assert.equal(await worker.evaluate(() => captures.length), 1);
     });
   }
 });
 
-test('Vision still stops disabled targets and document navigation', async () => {
+test('Vision cancels changed questions, choices, target controls, scrolling, resizing, and navigation', async () => {
   const changes = [
+    page => page.evaluate(() => { document.getElementById('question').textContent = 'A different question?'; }),
+    page => page.evaluate(() => { document.getElementById('option1').textContent = 'Different'; }),
+    page => page.evaluate(() => { const node = document.getElementById('option4'); node.replaceWith(node.cloneNode(true)); }),
     page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
+    page => page.evaluate(() => scrollTo(0, 100)),
+    page => page.setViewportSize({ width: 1300, height: 740 }),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
     page => page.reload()
   ];
@@ -653,7 +650,7 @@ test('Vision still stops disabled targets and document navigation', async () => 
       await change(page);
       const result = await finished(page);
       if (page.url() !== originalUrl || change === changes.at(-1)) assert.equal(result, undefined);
-      else assert.match(result.text, /supported, enabled/);
+      else assert.match(result.text, /changed|supported, enabled/);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal((await calls()).length, 1);
     });
@@ -683,6 +680,7 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
     body => { body.answers.target.box.left = -0.1; },
     body => { body.answers.target.box.left = body.answers.target.box.right; },
     body => { body.answers.target.confidence = 0.5; },
+    body => { body.answers.choices.box.right = 0.1; },
     body => { body.model = 'jev-1.13.0'; }
   ];
   for (const mutate of mutations) {
@@ -697,24 +695,37 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
   }
 });
 
-test('Vision accepts an answer target outside the independent choices box for both providers', async () => {
+test('Vision accepts real-provider confidence and rounded boxes when the target center hits the answer', async () => {
+  await configure({ mode: 'vision' });
+  await scenario(visionFixture, async (page, controls) => {
+    await mockVision(page, body => {
+      body.answers.ready.noul = 0.8;
+      body.answers.choices.confidence = 0.5;
+      body.answers.target.confidence = 0.64;
+      body.answers.choices.box.bottom = body.answers.target.box.bottom - 0.02;
+      return body;
+    });
+    await start(page, controls);
+    const result = await finished(page);
+    assert.equal(result.answer, '4', result.text);
+    assert.equal(result.confidence, 0.64);
+    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+    assert.equal(await page.evaluate(() => submissions), 0);
+  });
+});
+
+test('Vision rejects answer targets outside the choices region for both providers', async () => {
   for (const provider of ['typesafe', 'openrouter']) {
     await configure({ mode: 'vision', provider });
     await scenario(visionFixture, async (page, controls) => {
       await mockVision(page, body => {
         if (provider === 'openrouter') body.model = 'typesafe/jev-1.14';
-        body.answers.ready.noul = 0.8;
-        body.answers.choices.confidence = 0.5;
-        body.answers.target.confidence = 0.64;
         body.answers.choices.box = { left: 0, top: 0, right: 0.01, bottom: 0.01 };
         return body;
       });
       await start(page, controls);
-      const result = await finished(page);
-      assert.equal(result.answer, '4', result.text);
-      assert.equal(result.confidence, 0.64);
-      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-      assert.equal(await page.evaluate(() => submissions), 0);
+      assert.match((await finished(page)).text, /outside the answer choices/);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
     });
   }
 });
@@ -722,26 +733,6 @@ test('Vision accepts an answer target outside the independent choices box for bo
 const customVisionFixture = visionFixture.replace(/<button id="(option\d)">(\d)<\/button>/g,
   '<div id="$1" style="display:grid;place-items:center">$2</div>').replace('button{', '#choices>div,button{');
 const highlight = page => page.locator('[data-clickit-highlight]');
-
-test('Vision keeps a manual suggestion through countdowns, cosmetic changes, and unrelated keys', async () => {
-  await configure({ mode: 'vision' });
-  await scenario(customVisionFixture + '<main id="footer-countdown" style="height:600px">20</main>', async (page, controls) => {
-    await mockVision(page);
-    await start(page, controls);
-    assert.match((await finished(page)).text, /highlighted/);
-    await page.evaluate(() => {
-      const timer = document.getElementById('timer');
-      timer.replaceWith(timer.cloneNode(true));
-      document.getElementById('footer-countdown').firstChild.data = '19';
-      document.getElementById('option4').style.transform = 'translateX(0.5px)';
-    });
-    await page.keyboard.press('Shift');
-    await delay(200);
-    assert.equal(await highlight(page).count(), 1);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
-    assert.equal((await calls()).length, 1);
-  });
-});
 
 test('Vision highlights unsupported answers, keeps targeting accurate, and passes a manual click through', async () => {
   await configure({ mode: 'vision' }, { delay: 200 });
@@ -770,8 +761,10 @@ test('Vision highlights unsupported answers, keeps targeting accurate, and passe
   });
 });
 
-test('Vision suggestions dismiss on scrolling, resizing, navigation, Escape, tab switches, and the next run', async () => {
+test('Vision suggestions disappear on question changes, styles, scrolling, resizing, navigation, keys, tab switches, and the next run', async () => {
   const changes = [
+    page => page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; }),
+    page => page.evaluate(() => { document.getElementById('option4').style.transform = 'translateX(10px)'; }),
     page => page.evaluate(() => scrollTo(0, 50)),
     page => page.setViewportSize({ width: 1300, height: 740 }),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
@@ -819,51 +812,39 @@ test('Vision suggestions expire after eight seconds without another model reques
   });
 });
 
-test('Vision does not suggest unsupported controls when confidence is low', async () => {
-  await configure({ mode: 'vision', minConfidence: 0.8 });
-  await scenario(customVisionFixture, async (page, controls) => {
-    await mockVision(page, body => { body.answers.target.confidence = 0.5; return body; });
-    await start(page, controls);
-    assert.match((await finished(page)).text, /threshold/);
-    assert.equal(await highlight(page).count(), 0);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
-  });
-});
-
-test('Vision accepts answer phrases that start with navigation words', async () => {
-  for (const answer of ['Next generation', 'Start the engine', 'Continue the story']) {
-    await configure({ mode: 'vision' });
-    await scenario(visionFixture, async (page, controls) => {
-      await page.locator('#option4').evaluate((node, answer) => { node.textContent = answer; }, answer);
-      await mockVision(page);
+test('Vision does not suggest unsupported controls when confidence is low or the captured question changes', async () => {
+  for (const stale of [false, true]) {
+    await configure({ mode: 'vision', minConfidence: 0.8 }, { delay: 200 });
+    await scenario(customVisionFixture, async (page, controls) => {
+      await mockVision(page, body => {
+        if (!stale) body.answers.target.confidence = 0.5;
+        return body;
+      });
       await start(page, controls);
-      assert.equal((await finished(page)).answer, answer);
-      assert.deepEqual(await page.evaluate(() => clicks), [answer]);
+      if (stale) {
+        await until(async () => (await calls()).length === 1);
+        await page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; });
+      }
+      assert.match((await finished(page)).text, /threshold|changed/);
+      assert.equal(await highlight(page).count(), 0);
+      assert.deepEqual(await page.evaluate(() => clicks), []);
     });
   }
 });
 
 test('Vision rejects submission, navigation, disabled, and checkbox targets without suggesting them', async () => {
-  for (const kind of ['submit', 'implicit-submit', 'navigation', 'disabled', 'checkbox']) {
+  for (const kind of ['submit', 'navigation', 'custom-navigation', 'disabled', 'checkbox']) {
     await configure({ mode: 'vision' });
     await scenario(visionFixture, async (page, controls) => {
       await page.evaluate(kind => {
         const option = document.getElementById('option4');
-        if (kind === 'implicit-submit') {
-          const form = document.createElement('form');
-          option.before(form);
-          form.append(option);
-          form.addEventListener('submit', event => { event.preventDefault(); submissions++; });
-        }
-        if (kind === 'navigation') {
-          const nav = document.createElement('nav');
-          option.before(nav);
-          nav.append(option);
-        }
+        if (kind === 'navigation') option.textContent = 'Next';
+        if (kind === 'custom-navigation') option.outerHTML = '<div id="option4">Next</div>';
         if (kind === 'disabled') option.disabled = true;
         if (kind === 'checkbox') option.setAttribute('role', 'checkbox');
       }, kind);
       const body = await visionResponse(page, kind === 'submit' ? '#submit' : '#option4');
+      if (kind === 'submit') body.answers.choices.box.bottom = body.answers.target.box.bottom;
       await worker.evaluate(body => { mock.body = body; }, body);
       await start(page, controls);
       assert.match((await finished(page)).text, /submission|No supported/);

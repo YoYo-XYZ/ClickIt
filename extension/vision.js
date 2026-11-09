@@ -50,19 +50,66 @@
       width: (box.right - box.left) * width / content.width * viewport.width,
       height: (box.bottom - box.top) * height / content.height * viewport.height };
   }
+  function point(image, box, viewport) {
+    const rect = region(image, box, viewport);
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  }
 
   // Serialized into the isolated page context. No question extraction or API settings enter the page.
   function install() {
     globalThis.ClickItPage?.cancel();
+    const geometry = () => JSON.stringify([innerWidth, innerHeight, scrollX, scrollY, devicePixelRatio,
+      visualViewport?.scale, visualViewport?.offsetLeft, visualViewport?.offsetTop]);
+    const original = geometry(), url = location.href;
     const selector = 'button,[role="button"],input[type="radio"],[role="radio"],label';
-    let consumed = false, highlight, expiry;
-    const dismissEvents = ['scroll', 'resize', 'pagehide', 'popstate', 'hashchange', 'pointerdown', 'keydown'];
-    const dismiss = event => {
-      if (event.type !== 'keydown' || event.key === 'Escape') cancel();
+    const describe = node => {
+      const rect = node.getBoundingClientRect();
+      return JSON.stringify([rect.x, rect.y, rect.width, rect.height, node.textContent,
+        node.getAttribute('aria-label'), node.getAttribute('aria-checked'), node.getAttribute('aria-pressed'), node.checked]);
     };
+    const candidates = new Map([...document.querySelectorAll(selector)].map(node => [node, describe(node)]));
+    let invalid = document.visibilityState !== 'visible';
+    let regions, appearance, highlight, expiry, monitor, changed = [];
+    const invalidate = () => {
+      invalid = true;
+      if (highlight) cancel();
+    };
+    const intersects = rect => regions.some(region => rect.left < region.x + region.width && rect.right > region.x &&
+      rect.top < region.y + region.height && rect.bottom > region.y);
+    const regionAppearance = () => JSON.stringify([...document.querySelectorAll('body,body *')].flatMap(node => {
+      if (node === highlight) return [];
+      const rect = node.getBoundingClientRect();
+      if (!intersects(rect)) return [];
+      const style = getComputedStyle(node);
+      return [[rect.x, rect.y, rect.width, rect.height,
+        [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE).map(child => child.textContent).join(''),
+        style.display, style.visibility, style.opacity, style.color, style.backgroundColor,
+        style.font, style.letterSpacing, style.transform, style.filter, style.border, style.boxShadow]];
+    }));
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === 'childList' && [...record.addedNodes, ...record.removedNodes].every(node => node === highlight)) continue;
+        const node = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
+        if (!node) continue;
+        if (['data-question-id', 'data-slide-id'].includes(record.attributeName)) invalidate();
+        // Styles and container attributes can update for unrelated widgets. Their actual
+        // effect on the watched regions is checked visually, rather than rejecting every mutation.
+        if (node.closest('style,script') || record.type === 'attributes') continue;
+        const rect = node.getBoundingClientRect();
+        if (regions ? intersects(rect) : changed.length >= 1000) invalidate();
+        else if (!regions) changed.push(rect);
+      }
+      if (highlight && appearance !== regionAppearance()) invalidate();
+    });
+    observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
+    const events = ['scroll', 'resize', 'pagehide', 'popstate', 'hashchange', 'pointerdown', 'click', 'keydown'];
+    for (const event of events) window.addEventListener(event, invalidate, true);
+    const visibility = () => { if (document.visibilityState !== 'visible') invalidate(); };
+    document.addEventListener('visibilitychange', visibility);
 
     function check(point) {
-      if (consumed) throw new Error('This answer was already handled. Press Answer again.');
+      if (invalid || geometry() !== original || location.href !== url ||
+        (appearance && regionAppearance() !== appearance)) throw new Error('The page or viewport changed. Press Answer again.');
       const hit = document.elementFromPoint(point.x, point.y);
       if (!hit || hit.closest('[hidden],[aria-hidden="true"],[inert],[disabled],[aria-disabled="true"],nav,input:not([type="radio"]),[role="checkbox"]')) {
         throw new Error('No supported, enabled answer button at that position. No click made.');
@@ -71,21 +118,26 @@
       if (node?.matches('label')) node = node.control;
       const answerNode = node || hit;
       const answer = (answerNode.innerText || answerNode.getAttribute('aria-label') || [...answerNode.labels || []].map(label => label.innerText).join(' ')).replace(/\s+/g, ' ').trim();
-      if (!node) return null;
-      if (node.matches('button[type="submit"],input[type="submit"]') || (node.form && node.type === 'submit')) {
-        throw new Error('The target is a submission button. No click made.');
+      if (/^(submit|send|vote|confirm|next|back|previous|join|continue|start|close|skip|menu|settings|save|cancel|reset)(\b|$)/i.test(answer)) {
+        throw new Error('The target is a navigation or submission button. No click made.');
       }
+      if (!node) return null;
+      if (!candidates.has(node)) throw new Error('The answer button changed. Press Answer again.');
       if (node.matches('input:not([type="radio"])') ||
         node.closest('[hidden],[aria-hidden="true"],[inert],[disabled],[aria-disabled="true"],nav') ||
         node.matches(':disabled') || node.querySelector('input[type="checkbox"],[role="checkbox"]')) {
         throw new Error('No supported, enabled answer button at that position. No click made.');
       }
+      if (describe(node) !== candidates.get(node)) throw new Error('The answer button changed. Press Answer again.');
       return { node, answer: answer || 'Visual answer' };
     }
     function cancel() {
-      consumed = true;
-      for (const event of dismissEvents) window.removeEventListener(event, dismiss, true);
+      invalid = true;
+      observer.disconnect();
+      for (const event of events) window.removeEventListener(event, invalidate, true);
+      document.removeEventListener('visibilitychange', visibility);
       clearTimeout(expiry);
+      clearInterval(monitor);
       highlight?.remove();
       delete globalThis.ClickItPage;
     }
@@ -115,10 +167,20 @@
       shadow.append(style, area, marker, hint);
       (document.fullscreenElement || document.documentElement).append(highlight);
       expiry = setTimeout(cancel, 8000);
-      for (const event of dismissEvents) window.addEventListener(event, dismiss, true);
+      monitor = setInterval(() => {
+        if (geometry() !== original || location.href !== url || appearance !== regionAppearance()) invalidate();
+      }, 100);
       return { suggested: true, answer: 'Highlighted area' };
     }
     globalThis.ClickItPage = {
+      watch(point, watchedRegions) {
+        regions = watchedRegions;
+        if (changed.some(intersects)) invalidate();
+        changed = [];
+        check(point);
+        appearance = regionAppearance();
+        return true;
+      },
       click(point, rect) {
         if (highlight) throw new Error('The answer was already suggested. Press Answer again.');
         const control = check(point);
@@ -133,5 +195,5 @@
     };
     return { width: innerWidth, height: innerHeight };
   }
-  globalThis.ClickItVision = { capture, prepare, region, install };
+  globalThis.ClickItVision = { capture, prepare, region, point, install };
 })();

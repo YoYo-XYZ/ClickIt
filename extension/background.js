@@ -137,8 +137,16 @@ async function run(tabId, job, config) {
     if (result.confidence < config.minConfidence) throw new Error(`Skipped: answer confidence ${Math.round(result.confidence * 100)}% is below your ${Math.round(config.minConfidence * 100)}% threshold.`);
     let clickTarget = result.index, targetRegion;
     if (vision) {
-      targetRegion = V.region(q, result.boxes.target, snapshot.result);
-      clickTarget = { x: targetRegion.x + targetRegion.width / 2, y: targetRegion.y + targetRegion.height / 2 };
+      const { target: answerBox, choices } = result.boxes;
+      const x = (answerBox.left + answerBox.right) / 2, y = (answerBox.top + answerBox.bottom) / 2;
+      if (x < choices.left || x > choices.right || y < choices.top || y > choices.bottom) {
+        throw new Error('The answer target is outside the answer choices. No click made.');
+      }
+      clickTarget = V.point(q, answerBox, snapshot.result);
+      targetRegion = V.region(q, answerBox, snapshot.result);
+      const regions = [result.boxes.question, choices, answerBox];
+      await pageCall('watch', clickTarget, regions.map(box => V.region(q, box, snapshot.result)));
+      job.controller.signal.throwIfAborted();
     }
     const action = await pageCall('click', clickTarget, targetRegion);
     if (action.suggested) job.controller.signal.throwIfAborted();

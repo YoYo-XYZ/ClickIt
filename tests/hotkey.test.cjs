@@ -11,14 +11,21 @@ async function background(overrides = {}) {
   const hosted = { configured: true, registered: true, balance: { visionEnabled: true } };
   let release;
   const pending = new Promise(resolve => { release = resolve; });
-  const calls = [];
+  const calls = [], pageCalls = [], completions = [];
   const context = vm.createContext({
     AbortController, performance, setTimeout, clearTimeout,
-    ClickItVision: {},
+    ClickItVision: {
+      install: () => {}, capture: async () => 'image', prepare: async () => ({}),
+      point: () => ({ x: 10, y: 10 }), region: () => ({ x: 0, y: 0, width: 20, height: 20 })
+    },
     ClickItHosted: {
       state: async () => { if (overrides.waitForSetup) await pending; return hosted; },
-      answer: async (_q, mode) => { calls.push(mode); await pending; return { index: 1, confidence: 1 }; },
-      complete: async () => true
+      answer: async (_q, mode, job) => {
+        calls.push(mode); await pending;
+        if (overrides.result) job.hostedRequestId = 'test-request';
+        return overrides.result || { index: 1, confidence: 1 };
+      },
+      complete: async (_job, delivered) => { completions.push(delivered); return true; }
     },
     chrome: {
       storage: { local: { setAccessLevel: async () => {}, get: async () => ({ settings: { billingMode: 'hosted' } }), set: async () => {} } },
@@ -30,8 +37,11 @@ async function background(overrides = {}) {
         setTitle: async ({ tabId, title }) => { titles.set(tabId, title); }
       },
       tabs: { query: async () => [tab], onRemoved: event('removed'), onUpdated: event('updated'), onActivated: event('activated') },
-      scripting: { executeScript: async options => [{ documentId: 'doc', result: options.files
-        ? { question: '2 + 2?', options: ['3', '4'] } : { clicked: true } }] }
+      scripting: { executeScript: async options => {
+        if (options.args) pageCalls.push(options.args[0]);
+        return [{ documentId: 'doc', result: options.files
+          ? { question: '2 + 2?', options: ['3', '4'] } : { clicked: true, answer: '4' } }];
+      } }
     },
     importScripts: () => {}
   });
@@ -40,7 +50,7 @@ async function background(overrides = {}) {
   await vm.runInContext('ready', context);
   const inspect = expression => vm.runInContext(expression, context);
   const flush = () => new Promise(resolve => setImmediate(resolve));
-  return { listeners, badges, titles, tab, hosted, release, calls, inspect, flush };
+  return { listeners, badges, titles, tab, hosted, release, calls, pageCalls, completions, inspect, flush };
 }
 
 test('command and popup share the hosted job lock, including asynchronous setup', async () => {
@@ -109,4 +119,27 @@ test('navigation clears feedback and aborts an active command without restoring 
   assert.equal(app.badges.get(7), '');
   assert.equal(app.titles.get(7), 'ClickIt');
   assert.equal(app.calls.length, 0);
+});
+
+test('hosted Vision validates target containment before watching or clicking and releases rejected answers', async () => {
+  for (const outside of [false, true]) {
+    const result = { confidence: 1, boxes: {
+      question: { left: 0, top: 0, right: 1, bottom: 0.2 },
+      choices: { left: 0, top: 0.3, right: 1, bottom: 1 },
+      target: outside ? { left: 0, top: 0, right: 0.1, bottom: 0.1 }
+        : { left: 0.3, top: 0.4, right: 0.6, bottom: 0.7 }
+    } };
+    const app = await background({ result });
+    app.inspect("settings = { ...settings, mode: 'vision' }");
+    app.listeners.command('answer-question', app.tab);
+    await app.flush();
+    app.release();
+    await app.flush();
+    assert.deepEqual(app.calls, ['vision']);
+    assert.equal(app.inspect('jobs.size'), 0);
+    assert.deepEqual(app.pageCalls, outside ? [] : ['watch', 'click']);
+    assert.deepEqual(app.completions, [!outside]);
+    assert.equal(app.badges.get(7), outside ? 'ERR' : '✓');
+    if (outside) assert.match(app.titles.get(7), /outside the answer choices/);
+  }
 });
