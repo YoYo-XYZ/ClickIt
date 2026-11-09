@@ -18,6 +18,61 @@ async function clearSuggestion(tabId) {
   if (target) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
 }
 
+function toolbar(tabId, badge = '', text = 'ClickIt') {
+  void Promise.all([
+    chrome.action.setBadgeText({ tabId, text: badge }),
+    chrome.action.setBadgeBackgroundColor({ tabId, color: badge === 'ERR' ? '#a83232' : '#285b49' }),
+    chrome.action.setTitle({ tabId, title: text === 'ClickIt' ? text : `ClickIt: ${text}` })
+  ]).catch(() => {}); // The tab may have closed.
+}
+
+function reportStatus(tabId, value, badge) {
+  const previous = statuses.get(tabId);
+  statuses.set(tabId, { ...value, lastAction: value.answer ? value : previous?.lastAction });
+  if (statuses.size > 64) statuses.delete(statuses.keys().next().value);
+  toolbar(tabId, badge, value.text);
+}
+
+async function startAnswer(tab) {
+  await ready;
+  if (!tab) [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error('Open a regular webpage and press Answer or use the answer hotkey.');
+  if (jobs.has(tab.id)) throw new Error('Already answering this tab.');
+  if (settings.billingMode === 'hosted' && jobs.size) {
+    const text = 'Another answer is active. Please wait.';
+    reportStatus(tab.id, { text }, 'ERR');
+    throw new Error(text);
+  }
+  const config = settings;
+  const job = { controller: new AbortController(), windowId: tab.windowId, vision: config.mode === 'vision' };
+  // Reserve before async setup checks so repeated commands cannot start or charge twice.
+  jobs.set(tab.id, job);
+  reportStatus(tab.id, { text: 'Preparing answer…' }, '…');
+  try {
+    if (tab.url && !/^https?:\/\//.test(tab.url)) throw new Error('Open a regular webpage and press Answer or use the answer hotkey.');
+    if (config.billingMode === 'byok' && !config.apiKey) throw new Error('Add your API key in Settings first.');
+    if (config.billingMode === 'hosted') {
+      const hosted = await ClickItHosted.state();
+      if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
+      if (!hosted.registered) throw new Error('Start your free trial first.');
+      if (config.mode === 'vision' && !hosted.balance?.visionEnabled) throw new Error('Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
+    }
+    job.controller.signal.throwIfAborted();
+    void run(tab.id, job, config);
+    return { started: true };
+  } catch (error) {
+    if (jobs.get(tab.id) === job) {
+      if (!job.navigated) reportStatus(tab.id, { text: error.message }, 'ERR');
+      jobs.delete(tab.id);
+    }
+    throw error;
+  }
+}
+
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === 'answer-question') void startAnswer(tab).catch(() => {});
+});
+
 async function decide(q, config, signal) {
   const provider = C.providers[config.provider];
   const vision = config.mode === 'vision';
@@ -56,20 +111,19 @@ async function run(tabId, job, config) {
     return action.result;
   };
   const started = performance.now();
-  const report = value => {
-    if (jobs.get(tabId) !== job) return;
-    const previous = statuses.get(tabId);
-    statuses.set(tabId, { ...value, lastAction: value.answer ? value : previous?.lastAction });
-    if (statuses.size > 64) statuses.delete(statuses.keys().next().value);
+  const report = (value, badge = '…') => {
+    if (jobs.get(tabId) !== job || job.navigated) return;
+    reportStatus(tabId, value, badge);
   };
   try {
     await clearSuggestion(tabId);
+    job.controller.signal.throwIfAborted();
     report({ text: vision ? 'Capturing visible tab…' : 'Reading question…' });
     let snapshot;
     try {
       [snapshot] = await chrome.scripting.executeScript({ target: { tabId },
         ...(vision ? { func: V.install } : { files: ['content.js'] }) });
-    } catch { throw new Error('Cannot access this page. Open a regular webpage and invoke ClickIt from its toolbar icon.'); }
+    } catch { throw new Error('Cannot access this page. Open a regular webpage and press Answer or use the answer hotkey.'); }
     if (snapshot?.result?.error) throw new Error(snapshot.result.error);
     if (!snapshot?.result) throw new Error('No unambiguous single-choice text question found. This layout is unsupported.');
     target = { tabId, documentIds: [snapshot.documentId] };
@@ -97,14 +151,14 @@ async function run(tabId, job, config) {
     const status = { text: suggested ? 'Click the highlighted answer manually. No automatic click made.' :
       action.clicked ? 'Answer clicked. Submit it yourself if needed.' : 'Answer already selected. No click needed.',
       answer: vision ? action.answer : q.options[result.index], confidence: result.confidence, apiMs: result.apiMs, totalMs: Math.round(performance.now() - started) };
-    report(status);
+    report(status, suggested ? '!' : '✓');
     if (config.billingMode === 'hosted') {
       const synced = await ClickItHosted.complete(job, true).catch(() => false);
-      if (!synced) report({ ...status, text: `${status.text} Balance update pending.` });
+      if (!synced) report({ ...status, text: `${status.text} Balance update pending.` }, '!');
     }
   } catch (error) {
     report({ text: job.controller.signal.aborted ? job.controller.signal.reason?.message || 'Request expired or was cancelled. Press Answer to retry.' :
-      error instanceof TypeError ? `Cannot reach ${config.billingMode === 'hosted' ? 'ClickIt' : C.providers[config.provider].name}. Check your connection and press Answer.` : error.message });
+      error instanceof TypeError ? `Cannot reach ${config.billingMode === 'hosted' ? 'ClickIt' : C.providers[config.provider].name}. Check your connection and press Answer.` : error.message }, 'ERR');
   } finally {
     if (!delivered && job.hostedRequestId) await ClickItHosted.complete(job, false).catch(() => {});
     if (target && !suggested) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
@@ -113,12 +167,13 @@ async function run(tabId, job, config) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
-  // Page scripts have no API or settings access. Only the extension popup can start a run.
+  // Page scripts have no API or settings access. Messages must come from the popup.
   if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('popup.html')) return;
   (async () => {
     await ready;
     if (message.type === 'inspect') {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (message.opened && tab?.id && !jobs.has(tab.id)) toolbar(tab.id);
       return { settings, hosted: await ClickItHosted.state(), busy: jobs.has(tab?.id) || (settings.billingMode === 'hosted' && jobs.size > 0), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
     }
     if (['startTrial', 'refreshBalance', 'checkout', 'restoreAccess', 'billingPortal', 'previewUpgrade', 'changeSubscription', 'retryBilling'].includes(message.type)) {
@@ -138,29 +193,23 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       await chrome.storage.local.set({ settings });
       return { saved: true };
     }
-    if (message.type === 'answer') {
-      if (settings.billingMode === 'byok' && !settings.apiKey) throw new Error('Add your API key in Settings first.');
-      if (settings.billingMode === 'hosted') {
-        if (jobs.size) throw new Error('Another answer is active. Please wait.');
-        const hosted = await ClickItHosted.state();
-        if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
-        if (!hosted.registered) throw new Error('Start your free trial first.');
-        if (settings.mode === 'vision' && !hosted.balance?.visionEnabled) throw new Error('Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
-      }
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.id || (tab.url && !/^https?:\/\//.test(tab.url))) throw new Error('Open a regular webpage and invoke ClickIt from its toolbar icon.');
-      if (jobs.has(tab.id)) throw new Error('Already answering this tab.');
-      if (settings.billingMode === 'hosted' && jobs.size) throw new Error('Another answer is active. Please wait.');
-      const job = { controller: new AbortController(), windowId: tab.windowId, vision: settings.mode === 'vision' };
-      jobs.set(tab.id, job);
-      void run(tab.id, job, settings);
-      return { started: true };
-    }
+    if (message.type === 'answer') return startAnswer();
     throw new Error('Unknown request.');
   })().then(data => respond({ ok: true, data }), error => respond({ ok: false, error: error.message }));
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId => { jobs.get(tabId)?.controller.abort(); jobs.delete(tabId); statuses.delete(tabId); suggestions.delete(tabId); });
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.status !== 'loading' && !change.url) return;
+  const job = jobs.get(tabId);
+  if (job) {
+    job.navigated = true;
+    job.controller.abort(new Error('The page changed. Press Answer again.'));
+  }
+  statuses.delete(tabId);
+  void clearSuggestion(tabId);
+  toolbar(tabId);
+});
 chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
   for (const [id, suggestion] of suggestions) if (suggestion.windowId === windowId && id !== tabId) void clearSuggestion(id);
   for (const [id, job] of jobs) if (job.vision && job.windowId === windowId && id !== tabId) {

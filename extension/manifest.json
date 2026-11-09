@@ -7,5 +7,11 @@
   "host_permissions": ["https://api.typesafe.ai/*", "https://openrouter.ai/*"],
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
   "background": { "service_worker": "background.js" },
+  "commands": {
+    "answer-question": {
+      "suggested_key": { "default": "Alt+Shift+A", "mac": "Alt+Shift+A" },
+      "description": "Answer the current question"
+    }
+  },
   "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } }
 }

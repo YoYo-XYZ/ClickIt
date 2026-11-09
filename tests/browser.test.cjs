@@ -100,6 +100,10 @@ async function scenario(html, action, origin) {
 
 test('manifest has only user-triggered page access; old settings are discarded', async () => {
   const manifest = require('../extension/manifest.json');
+  assert.deepEqual(manifest.commands['answer-question'], {
+    suggested_key: { default: 'Alt+Shift+A', mac: 'Alt+Shift+A' },
+    description: 'Answer the current question'
+  });
   assert.deepEqual(manifest.permissions, ['storage', 'activeTab', 'scripting']);
   assert.equal(manifest.content_scripts, undefined);
   assert.deepEqual(manifest.host_permissions, ['https://api.typesafe.ai/*', 'https://openrouter.ai/*']);
@@ -218,8 +222,11 @@ test('changes and replaced controls invalidate a pending decision without answer
     await scenario(fixture, async (page, controls) => {
       await start(page, controls);
       await until(async () => (await calls()).length === 1);
+      const originalUrl = page.url();
       await page.evaluate(change);
-      assert.match((await finished(page)).text, /changed/);
+      const result = await finished(page);
+      if (page.url() !== originalUrl) assert.equal(result, undefined);
+      else assert.match(result.text, /changed/);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal((await calls()).length, 1);
     });
@@ -373,6 +380,55 @@ test('ungranted and restricted pages fail cleanly; page contexts cannot access s
     } }), id);
     assert.deepEqual(result.result, [true, true, true]);
     assert.equal((await calls()).length, 0);
+  });
+});
+
+test('hotkey settings show actual assignments in both billing modes and open Chrome shortcut settings', async () => {
+  await configure();
+  const controls = await popup();
+  try {
+    await controls.evaluate(() => {
+      globalThis.testShortcut = 'Alt+Shift+Y';
+      chrome.commands.getAll = async () => [{ name: 'answer-question', shortcut: testShortcut }];
+      chrome.tabs.create = async options => { globalThis.shortcutPage = options.url; };
+    });
+    for (const [mode, shortcut] of [['byok', 'Alt+Shift+Y'], ['hosted', '']]) {
+      await controls.evaluate(shortcut => { testShortcut = shortcut; }, shortcut);
+      await controls.locator('#settingsToggle').click();
+      await controls.locator('#billingMode').selectOption(mode);
+      await controls.waitForFunction(value => document.getElementById('hotkeyValue').textContent === value, shortcut || 'Not assigned');
+      assert.equal(await controls.locator('#hotkeyValue').isVisible(), true);
+      assert.equal(await controls.locator('#answerShortcut').isVisible(), false);
+      await controls.locator('#changeShortcut').click();
+      assert.equal(await controls.evaluate(() => shortcutPage), 'chrome://extensions/shortcuts');
+      await controls.locator('#settingsToggle').click();
+      assert.equal(await controls.locator('#answerShortcut').textContent(), shortcut ? 'Alt + Shift + Y to clickit' : 'Set an answer hotkey in Settings');
+    }
+  } finally { await controls.close(); }
+});
+
+test('toolbar reports popup runs, keeps busy feedback on opening, and clears completed feedback only on opening or navigation', async () => {
+  await configure({}, { delay: 350 });
+  await scenario(fixture, async (page, controls) => {
+    const id = await tabId(page);
+    const badge = () => worker.evaluate(id => chrome.action.getBadgeText({ tabId: id }), id);
+    await start(page, controls);
+    assert.equal(await badge(), '…');
+    await controls.evaluate(() => refresh(true));
+    assert.equal(await badge(), '…');
+    await finished(page);
+    assert.equal(await badge(), '✓');
+    await controls.evaluate(() => refresh());
+    assert.equal(await badge(), '✓');
+    await controls.evaluate(() => refresh(true));
+    assert.equal(await badge(), '');
+    await worker.evaluate(() => { mock.status = 429; });
+    await start(page, controls);
+    await finished(page);
+    assert.equal(await badge(), 'ERR');
+    assert.match(await worker.evaluate(id => chrome.action.getTitle({ tabId: id }), id), /rate limit/);
+    await page.reload();
+    assert.equal(await badge(), '');
   });
 });
 
@@ -590,9 +646,11 @@ test('Vision cancels changed questions, choices, target controls, scrolling, res
       await mockVision(page);
       await start(page, controls);
       await until(async () => (await calls()).length === 1);
+      const originalUrl = page.url();
       await change(page);
       const result = await finished(page);
-      assert.match(result.text, /changed|supported, enabled/);
+      if (page.url() !== originalUrl || change === changes.at(-1)) assert.equal(result, undefined);
+      else assert.match(result.text, /changed|supported, enabled/);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal((await calls()).length, 1);
     });
@@ -661,11 +719,13 @@ const customVisionFixture = visionFixture.replace(/<button id="(option\d)">(\d)<
 const highlight = page => page.locator('[data-clickit-highlight]');
 
 test('Vision highlights unsupported answers, keeps targeting accurate, and passes a manual click through', async () => {
-  await configure({ mode: 'vision' });
+  await configure({ mode: 'vision' }, { delay: 200 });
   await scenario(customVisionFixture, async (page, controls) => {
     await mockVision(page);
     await start(page, controls);
     assert.match((await finished(page)).text, /Click the highlighted answer manually/);
+    const id = await tabId(page);
+    assert.equal(await worker.evaluate(id => chrome.action.getBadgeText({ tabId: id }), id), '!');
     assert.deepEqual(await page.evaluate(() => clicks), []);
     assert.equal(await page.evaluate(() => submissions), 0);
     assert.equal((await calls()).length, 1);

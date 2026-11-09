@@ -21,6 +21,8 @@ For the configured local pilot, load `dist/extension` in Chrome. The backend cur
 
 - **Text** reads the page. **Vision** reads a screenshot. Keep the question and choices visible.
 - Press **Answer** for each question. Click highlights yourself. Submit manually if needed.
+- Use **Alt+Shift+A** to answer with the popup closed, using your saved Text or Vision mode. On macOS, use **Option+Shift+A**. Chrome may leave the shortcut unassigned if it conflicts. Check the actual **Answer hotkey** in Settings and click its green shortcut button to change or remove it in Chrome. Existing installations may keep their previous assignment.
+- The toolbar badge shows `…` while answering, `✓` after selection, `!` when action is needed, or `ERR` on failure. Hover for status or open ClickIt for details.
 - Edit prompts in **Settings**. **Reset** restores the default.
 
 ## Update without reinstalling
@@ -39,6 +41,8 @@ npm test
 npm run check:worker
 npm run package:extension -- --api-url https://YOUR-WORKER.workers.dev
 ```
+
+On Windows, `npm run test:hotkey:windows` opens a temporary Chromium profile and verifies real hotkeys in Text and Vision, duplicate protection, and shortcut remapping. It uses mocked AI responses and does not spend credits.
 
 The Worker serves the public pages and API from the same origin. A custom domain is optional. No API or payment secrets belong in the extension. Your deployment needs Cloudflare authentication, D1, provider and Stripe secrets, and the published extension origin before it can accept live customers.
 

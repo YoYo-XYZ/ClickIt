@@ -88,7 +88,25 @@ $('resetPrompt').addEventListener('click', () => {
 function showSettings(open) {
   $('settingsPanel').hidden = !open;
   $('settingsToggle').setAttribute('aria-expanded', String(open));
+  if (open) void refreshShortcut();
 }
+async function refreshShortcut() {
+  try {
+    const commands = await chrome.commands.getAll();
+    const shortcut = commands.find(command => command.name === 'answer-question')?.shortcut;
+    $('hotkeyValue').textContent = shortcut || 'Not assigned';
+    $('answerShortcut').textContent = shortcut ? `${shortcut.replace(/\bCtrl\b/g, 'Cltr').split('+').join(' + ')} to clickit` : 'Set an answer hotkey in Settings';
+    $('hotkeyError').textContent = '';
+  } catch {
+    $('hotkeyValue').textContent = 'Unavailable';
+    $('answerShortcut').textContent = 'Manage your answer hotkey in Settings';
+    $('hotkeyError').textContent = 'Cannot read the shortcut. Open Chrome’s shortcut settings to check it.';
+  }
+}
+$('changeShortcut').addEventListener('click', async () => {
+  try { await chrome.tabs.create({ url: 'chrome://extensions/shortcuts' }); }
+  catch { $('hotkeyError').textContent = 'Open chrome://extensions/shortcuts to change or remove the hotkey.'; }
+});
 $('settingsToggle').addEventListener('click', () => showSettings($('settingsPanel').hidden));
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !$('settingsPanel').hidden) {
@@ -99,7 +117,7 @@ document.addEventListener('keydown', event => {
 });
 async function refresh(initial = false) {
   try {
-    const data = await send({ type: 'inspect' });
+    const data = await send({ type: 'inspect', opened: initial });
     running = data.busy;
     hosted = data.hosted;
     showCredits();
@@ -223,4 +241,5 @@ if (ClickItConfig.apiUrl) {
 }
 $('supportLink').href = ClickItConfig.supportUrl;
 void refresh(true);
+void refreshShortcut();
 setInterval(() => { if (!sending) void refresh(); }, 500);

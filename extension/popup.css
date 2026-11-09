@@ -37,7 +37,7 @@ button:disabled, select:disabled { opacity: .55; cursor: default; }
 .status p { margin: 0; color: #b7c3d2; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .status #timing { margin-top: 5px; color: #7e8e9e; font-size: 11px; }
 .status p:empty, .status:has(#message:not(:empty)) #status, .status:has(#message:not(:empty)) #timing { display: none; }
-body:has(#settingsPanel:not([hidden])) .mode-control, body:has(#settingsPanel:not([hidden])) #answerNow, body:has(#settingsPanel:not([hidden])) .status { display: none; }
+body:has(#settingsPanel:not([hidden])) .mode-control, body:has(#settingsPanel:not([hidden])) #answerNow, body:has(#settingsPanel:not([hidden])) .shortcut-hint, body:has(#settingsPanel:not([hidden])) .status { display: none; }
 #settingsToggle { position: absolute; top: 24px; right: 24px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid #303c49; border-radius: 50%; background: #232d39; color: #d8e1ea; }
 #settingsToggle:hover, #settingsToggle[aria-expanded="true"] { border-color: #82bea9; color: #a8edcf; }
 form label { display: block; margin-bottom: 14px; color: #aab8c7; font-size: 12px; }
@@ -48,6 +48,14 @@ form input, form select { display: block; width: 100%; margin-top: 7px; padding:
 #resetPrompt { padding: 3px 0 3px 10px; background: transparent; color: #9becce; font-size: 12px; }
 textarea { width: 100%; padding: 10px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; line-height: 1.5; resize: vertical; }
 #saveSettings { width: 100%; padding: 11px; border-radius: 9px; background: #9becce; color: #15372e; font-weight: 650; }
+.brand > h1, .brand-icon { flex-shrink: 0; }
+.shortcut-hint { min-width: 0; margin: 0 0 0 auto; color: #aab8c7; font-size: 11px; line-height: 1.4; text-align: right; overflow-wrap: anywhere; }
+.hotkey-settings { margin-bottom: 16px; padding: 12px; border: 1px solid #35414f; border-radius: 8px; }
+.hotkey-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #aab8c7; font-size: 12px; }
+#hotkeyValue { font: inherit; }
+.hotkey-settings p { margin: 8px 0; color: #aab8c7; font-size: 12px; line-height: 1.5; }
+#changeShortcut { padding: 8px 10px; border-radius: 8px; background: #283d38; color: #bcf3dc; }
+#hotkeyError:empty { display: none; }
 @media (prefers-reduced-motion: reduce) { #answerNow { transition: none; } }
 [hidden] { display: none !important; }
 #hostedPanel { padding: 14px; border: 1px solid #35414f; border-radius: 12px; background: #1b242f; }

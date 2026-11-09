@@ -6,6 +6,7 @@
   "description": "Single-question quiz suggestions with monthly AI subscriptions or your own API key",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
+    "test:hotkey:windows": "node scripts/test-hotkey-windows.cjs",
     "test:vision:live": "node scripts/live-vision.cjs",
     "test:hosted:live": "node scripts/live-hosted.cjs",
     "test:server": "node --test tests/server.test.cjs tests/subscriptions.test.cjs",
