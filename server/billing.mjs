@@ -1,5 +1,4 @@
-// Stripe's pinned 2024-06-20 contract is kept in worker.mjs. No browser-provided
-// amount, allowance, customer, subscription, or Stripe price is authoritative.
+// No browser-provided amount, allowance, customer, subscription, or price is authoritative.
 const PLANS = Object.freeze({
   basic: Object.freeze({ id: 'basic', amount: 499, credits: 500 }),
   plus: Object.freeze({ id: 'plus', amount: 999, credits: 1200 })
@@ -9,11 +8,10 @@ const objectId = value => typeof value === 'string' ? value : value?.id;
 const terminal = status => ['canceled', 'incomplete_expired'].includes(status);
 const available = 'MAX(0,granted-revoked-consumed-reserved)';
 
-export function billingService({ env, stripe, now, fail }) {
+export function billingService({ env, fetchImpl, now, fail }) {
   const db = env.DB;
   const started = Date.now();
   let activeLease = null;
-  const transport = stripe;
   async function heartbeat() {
     if (!activeLease) return;
     const time = now + Date.now() - started;
@@ -21,12 +19,21 @@ export function billingService({ env, stripe, now, fail }) {
       time+120000, activeLease.owner, activeLease.id, time).run();
     if (!updated.meta.changes) fail(409, 'Billing operation expired. Refresh and try again.');
   }
-  stripe = async (...args) => {
+  async function stripe(path, form, key) {
+    if (!env.STRIPE_SECRET_KEY) fail(503, 'Payments are not configured.');
     await heartbeat();
-    const result = await transport(...args);
+    const response = await fetchImpl(`https://api.stripe.com/v1/${path}`, {
+      method: form ? 'POST' : 'GET', headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+        'Stripe-Version': '2024-06-20',
+        ...(form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+        ...(key ? { 'Idempotency-Key': key } : {}) },
+      ...(form ? { body: new URLSearchParams(form).toString() } : {}), signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) fail(502, 'Payment service unavailable. Please try again later.');
+    const result = await response.json();
     await heartbeat();
     return result;
-  };
+  }
   const prices = { basic: env.STRIPE_BASIC_PRICE_ID, plus: env.STRIPE_PLUS_PRICE_ID };
   const planForPrice = value => Object.values(PLANS).find(p => prices[p.id] && prices[p.id] === objectId(value));
   const assertLive = value => { if (value.livemode !== (env.STRIPE_LIVE_MODE === 'true')) fail(400, 'Incorrect payment environment.'); };
@@ -67,15 +74,15 @@ export function billingService({ env, stripe, now, fail }) {
       CASE WHEN status NOT IN ('canceled','incomplete_expired') THEN 0 ELSE 1 END,period_end DESC LIMIT 1`, owner).first();
   }
   async function snapshot(owner) {
-    const row = await stmt(db, `SELECT COALESCE(SUM(${available}),0) AS credits,
-      COALESCE(SUM(CASE WHEN expires_at IS NOT NULL THEN ${available} ELSE 0 END),0) AS monthlyCredits,
-      COALESCE(SUM(CASE WHEN expires_at IS NULL THEN ${available} ELSE 0 END),0) AS otherCredits
-      FROM credit_lots WHERE installation_id=? AND (expires_at IS NULL OR expires_at>?)`, owner, now).first();
-    const held = await stmt(db, 'SELECT COALESCE(SUM(reserved),0) AS reserved FROM credit_lots WHERE installation_id=?', owner).first();
+    const row = await stmt(db, `SELECT
+      COALESCE(SUM(CASE WHEN expires_at IS NULL OR expires_at>? THEN ${available} ELSE 0 END),0) AS credits,
+      COALESCE(SUM(CASE WHEN expires_at>? THEN ${available} ELSE 0 END),0) AS monthlyCredits,
+      COALESCE(SUM(CASE WHEN expires_at IS NULL THEN ${available} ELSE 0 END),0) AS otherCredits,
+      COALESCE(SUM(reserved),0) AS reserved FROM credit_lots WHERE installation_id=?`, now, now, owner).first();
     const sub = await current(owner);
     const account = await stmt(db, 'SELECT customer_id,reconcile_error FROM billing_accounts WHERE installation_id=?', owner).first();
     const period = sub ? await stmt(db, 'SELECT allowance FROM subscription_periods WHERE subscription_id=? AND period_start=?', sub.id, sub.period_start).first() : null;
-    return { ...row, ...held, checkoutEnabled: env.CHECKOUT_ENABLED === 'true',
+    return { ...row, checkoutEnabled: env.CHECKOUT_ENABLED === 'true',
       visionEnabled: env.VISION_ENABLED === 'true',
       billingManagementAvailable: Boolean(account?.customer_id && env.STRIPE_PORTAL_CONFIGURATION_ID),
       billingSyncError: Boolean(account?.reconcile_error),
@@ -190,17 +197,21 @@ export function billingService({ env, stripe, now, fail }) {
       if (Number.isSafeInteger(charge?.amount_refunded)) await refundInvoice(intentId, charge.amount_refunded);
     }
   }
+  async function list(path) {
+    const items = [];
+    let after = '';
+    do {
+      const page = await stripe(`${path}&limit=100${after ? `&starting_after=${after}` : ''}`);
+      if (!Array.isArray(page.data)) fail(502, 'Unable to reconcile billing records.');
+      items.push(...page.data);
+      after = page.has_more && page.data.length ? page.data.at(-1).id : '';
+    } while (after);
+    return items;
+  }
   async function reconcileInvoices(sub, account) {
     // Process regular invoices before prorations, including when the upgrade webhook
     // arrives first. Pagination prevents missed renewals after a long outage.
-    const invoices = [];
-    let after = '';
-    do {
-      const page = await stripe(`invoices?subscription=${sub.id}&status=paid&limit=100${after ? `&starting_after=${after}` : ''}`);
-      if (!Array.isArray(page.data)) fail(502, 'Unable to reconcile subscription invoices.');
-      invoices.push(...page.data);
-      after = page.has_more && page.data.length ? page.data.at(-1).id : '';
-    } while (after);
+    const invoices = await list(`invoices?subscription=${sub.id}&status=paid`);
     invoices.sort((a,b) => (a.billing_reason === 'subscription_update') - (b.billing_reason === 'subscription_update') || a.created-b.created);
     for (const invoice of invoices) {
       const stored = await stmt(db, 'SELECT stripe_fee FROM subscription_invoices WHERE id=?', invoice.id).first();
@@ -211,14 +222,7 @@ export function billingService({ env, stripe, now, fail }) {
     if (!account.customer_id) return;
     // Retrieve all statuses so a missed canceled event cannot leave a permanent
     // local active row or allow a second subscription at checkout.
-    let after = '';
-    const subs = [];
-    do {
-      const page = await stripe(`subscriptions?customer=${account.customer_id}&status=all&limit=100${after ? `&starting_after=${after}` : ''}`);
-      if (!Array.isArray(page.data)) fail(502, 'Unable to reconcile subscription.');
-      subs.push(...page.data);
-      after = page.has_more && page.data.length ? page.data.at(-1).id : '';
-    } while (after);
+    const subs = await list(`subscriptions?customer=${account.customer_id}&status=all`);
     subs.sort((a,b) => Number(!terminal(a.status))-Number(!terminal(b.status)));
     for (const sub of subs) {
       await syncSubscription(sub, account);
@@ -334,13 +338,13 @@ export function billingService({ env, stripe, now, fail }) {
     return locked(owner, async account => {
       const previous = await stmt(db, 'SELECT * FROM billing_operations WHERE id=?', data.changeId).first();
       if (previous && (previous.installation_id !== owner || previous.kind !== data.action)) fail(403, 'Invalid billing operation.');
-      if (previous?.result) return { ...await snapshot(owner), changed: true };
+      if (previous?.result) return { ...await snapshot(owner), changed: JSON.parse(previous.result).changed };
       if (previous && previous.expires_at <= now) fail(409, 'Billing operation expired. Refresh your subscription before trying again.');
       const operation = previous ? JSON.parse(previous.payload) : data;
       if (operation.quoteId !== data.quoteId) fail(403, 'Billing operation does not match this quote.');
       const sub = await active(account);
       const recovered = previous && await stmt(db, 'SELECT result FROM billing_operations WHERE id=?', data.changeId).first();
-      if (recovered?.result) return { ...await snapshot(owner), ...JSON.parse(recovered.result) };
+      if (recovered?.result) return { ...await snapshot(owner), changed: JSON.parse(recovered.result).changed };
       const pending = await stmt(db, `SELECT id FROM billing_operations WHERE installation_id=? AND result IS NULL
         AND expires_at>? AND json_extract(payload,'$.request') IS NOT NULL AND id!=? LIMIT 1`, owner, now, data.changeId).first();
       if (pending) fail(409, 'Retry the previous billing change before starting another.');
@@ -384,9 +388,8 @@ export function billingService({ env, stripe, now, fail }) {
       // increase the allowance. Retrieve state rather than trusting event order.
       const authoritative = await retrieveSubscription(sub.id, account);
       await reconcileInvoices(authoritative, account);
-      const result = { ...(await snapshot(owner)), changed: true };
-      await stmt(db, 'UPDATE billing_operations SET result=? WHERE id=?', JSON.stringify(result), data.changeId).run();
-      return result;
+      await stmt(db, 'UPDATE billing_operations SET result=? WHERE id=?', JSON.stringify({ changed: true }), data.changeId).run();
+      return { ...await snapshot(owner), changed: true };
     });
   }
   async function portal(owner) {
@@ -412,7 +415,50 @@ export function billingService({ env, stripe, now, fail }) {
       await reconcileInvoices(sub, fresh);
     });
   }
+  // Historical packs still need delayed fulfillment and refund accounting.
+  async function fulfillPurchase(session) {
+    if (session.payment_status !== 'paid') return;
+    const item = session.line_items?.data;
+    const owner = session.client_reference_id;
+    if (session.mode !== 'payment' || session.currency !== 'usd' || session.amount_subtotal !== 499 ||
+      !Number.isSafeInteger(session.amount_total) || session.amount_total < 499 ||
+      session.livemode !== (env.STRIPE_LIVE_MODE === 'true') ||
+      !Array.isArray(item) || item.length !== 1 || item[0].price?.id !== env.STRIPE_PRICE_ID || item[0].quantity !== 1 ||
+      typeof session.payment_intent !== 'string') fail(400, 'Unexpected paid product.');
+    const checkout = await stmt(db, 'SELECT installation_id FROM checkouts WHERE id=?', session.metadata?.clickit_checkout || '').first();
+    if (!checkout || checkout.installation_id !== owner) fail(400, 'Checkout owner does not match.');
+    const intent = await stripe(`payment_intents/${encodeURIComponent(session.payment_intent)}?expand[]=latest_charge.balance_transaction`);
+    const refunded = Math.max(0, Math.min(session.amount_total, intent.latest_charge?.amount_refunded || 0));
+    const fee = intent.latest_charge?.balance_transaction;
+    await db.batch([
+      stmt(db, `INSERT INTO orders(session_id,installation_id,payment_intent,amount,currency,credits,total_amount,tax_amount,stripe_fee,stripe_fee_currency,created_at)
+        VALUES(?,?,?,499,'usd',500,?,?,?,?,?) ON CONFLICT(session_id) DO NOTHING`, session.id, owner, session.payment_intent,
+        session.amount_total, session.total_details?.amount_tax ?? 0,
+        Number.isSafeInteger(fee?.fee) ? fee.fee : null, typeof fee?.currency === 'string' ? fee.currency : null, now),
+      stmt(db, 'UPDATE orders SET refunded_amount=MAX(refunded_amount,?) WHERE session_id=?', refunded, session.id),
+      stmt(db, `INSERT INTO credit_lots(id,installation_id,order_id,granted,created_at)
+        SELECT ?,installation_id,session_id,500,? FROM orders WHERE session_id=? ON CONFLICT(order_id) DO NOTHING`, `paid:${session.id}`, now, session.id),
+      stmt(db, `UPDATE credit_lots SET revoked=MAX(revoked,(SELECT MIN(500,(refunded_amount*500+total_amount-1)/total_amount)
+        FROM orders WHERE session_id=credit_lots.order_id)) WHERE order_id=?`, session.id)
+    ]);
+  }
+  async function refundPurchase(intent, amount) {
+    await db.batch([
+      stmt(db, 'UPDATE orders SET refunded_amount=MAX(refunded_amount,MIN(total_amount,?)) WHERE payment_intent=?', amount, intent),
+      stmt(db, `UPDATE credit_lots SET revoked=MAX(revoked, (SELECT MIN(500,(refunded_amount*500+total_amount-1)/total_amount)
+        FROM orders WHERE session_id=credit_lots.order_id)) WHERE order_id IN (SELECT session_id FROM orders WHERE payment_intent=?)`, intent)
+    ]);
+  }
+
   async function handleEvent(notification) {
+    if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(notification.type)) {
+      const id = notification.data?.object?.id;
+      if (!/^cs_[A-Za-z0-9_]+$/.test(id || '')) fail(400, 'Invalid checkout.');
+      const session = await stripe(`checkout/sessions/${id}?expand[]=line_items`);
+      if (session.mode === 'subscription') await checkoutCompleted(session);
+      else await fulfillPurchase(session);
+      return;
+    }
     if (notification.type === 'charge.refunded') {
       const charge = notification.data?.object;
       if (charge?.invoice) {
@@ -425,12 +471,14 @@ export function billingService({ env, stripe, now, fail }) {
             await reconcileInvoices(sub, fresh);
             await settleInvoice(invoice, sub, fresh);
           });
-          return true;
+          return;
         }
       }
-      return false;
+      if (typeof charge?.payment_intent !== 'string' || !Number.isSafeInteger(charge.amount_refunded) || charge.amount_refunded < 0) fail(400, 'Invalid refund.');
+      await refundPurchase(charge.payment_intent, charge.amount_refunded);
+      return;
     }
-    if (!notification.type.startsWith('invoice.') && !notification.type.startsWith('customer.subscription.')) return false;
+    if (!notification.type.startsWith('invoice.') && !notification.type.startsWith('customer.subscription.')) return;
     const object = notification.data?.object;
     const isInvoice = notification.type.startsWith('invoice.');
     const remote = isInvoice ? await stripe(`invoices/${object?.id}`) : await stripe(`subscriptions/${object?.id}`);
@@ -441,7 +489,6 @@ export function billingService({ env, stripe, now, fail }) {
       await reconcileInvoices(sub, fresh);
       if (isInvoice) await settleInvoice(remote, sub, fresh);
     });
-    return true;
   }
   async function scheduled() {
     const accounts = await stmt(db, 'SELECT installation_id FROM billing_accounts WHERE customer_id IS NOT NULL AND lease_until<=? ORDER BY reconciled_at LIMIT 10', now).all();
@@ -453,5 +500,5 @@ export function billingService({ env, stripe, now, fail }) {
       }
     }
   }
-  return { snapshot, checkout, preview, change, portal, checkoutCompleted, handleEvent, scheduled };
+  return { snapshot, checkout, preview, change, portal, handleEvent, scheduled };
 }

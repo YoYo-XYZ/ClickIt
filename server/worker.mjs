@@ -41,7 +41,10 @@ async function readBody(request, limit = MAX_BODY) {
 }
 async function bodyJSON(request, limit) {
   const raw = await readBody(request, limit);
-  try { return JSON.parse(raw); } catch { fail(400, 'Invalid JSON.'); }
+  let data;
+  try { data = JSON.parse(raw); } catch { fail(400, 'Invalid JSON.'); }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) fail(400, 'A JSON object is required.');
+  return data;
 }
 const stmt = (db, sql, ...args) => db.prepare(sql).bind(...args);
 async function expire(db, now) {
@@ -56,9 +59,6 @@ async function cleanup(db, now) {
     stmt(db, "UPDATE installations SET ip_hash='' WHERE created_at < ? AND ip_hash != ''", cutoff)
   ]);
 }
-function billing(env, fetchImpl, now) {
-  return billingService({ env, now, fail, stripe: (path, form, key) => stripe(fetchImpl, env, path, form, key) });
-}
 async function identity(request, db) {
   const token = /^Bearer (ci_[a-f0-9]{64})$/.exec(request.headers.get('Authorization') || '')?.[1];
   if (!token) fail(401, 'Start your free trial or restore your installation credential.');
@@ -67,7 +67,7 @@ async function identity(request, db) {
   return row.id;
 }
 function requestData(data, env) {
-  if (!data || typeof data !== 'object' || !/^[a-f0-9-]{36}$/.test(data.requestId || '')) fail(400, 'A valid request ID is required.');
+  if (!/^[a-f0-9-]{36}$/.test(data.requestId || '')) fail(400, 'A valid request ID is required.');
   if (data.mode === 'text') {
     let question;
     try { question = C.validateQuestion(data.question); } catch { fail(400, 'Invalid quiz question or choices.'); }
@@ -80,18 +80,6 @@ function requestData(data, env) {
     return { body: C.visionRequest(data.image, 'openrouter'), mode: 'vision' };
   }
   fail(400, 'Choose Text or Vision mode.');
-}
-async function stripe(fetchImpl, env, path, form, key) {
-  if (!env.STRIPE_SECRET_KEY) fail(503, 'Payments are not configured.');
-  const response = await fetchImpl(`https://api.stripe.com/v1/${path}`, {
-    method: form ? 'POST' : 'GET', headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
-      'Stripe-Version': '2024-06-20',
-      ...(form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
-      ...(key ? { 'Idempotency-Key': key } : {}) },
-    ...(form ? { body: new URLSearchParams(form).toString() } : {}), signal: AbortSignal.timeout(10000)
-  });
-  if (!response.ok) fail(502, 'Payment service unavailable. Please try again later.');
-  return response.json();
 }
 async function webhook(request, env, fetchImpl, now) {
   if (!env.STRIPE_WEBHOOK_SECRET) fail(503, 'Webhook is not configured.');
@@ -106,53 +94,8 @@ async function webhook(request, env, fetchImpl, now) {
   try { notification = JSON.parse(raw); } catch { fail(400, 'Invalid webhook body.'); }
   if (!notification || typeof notification.type !== 'string') fail(400, 'Invalid webhook event.');
   if (notification.livemode !== (env.STRIPE_LIVE_MODE === 'true')) fail(400, 'Incorrect payment environment.');
-  const object = notification.data?.object;
-  const subscriptions = billing(env, fetchImpl, now);
-  if (await subscriptions.handleEvent(notification)) return json({ received: true });
-  if (['checkout.session.completed', 'checkout.session.async_payment_succeeded'].includes(notification.type)) {
-    if (!/^cs_[A-Za-z0-9_]+$/.test(object?.id || '')) fail(400, 'Invalid checkout.');
-    // Retrieve authoritative state and line items, including on replay or delayed delivery.
-    const session = await stripe(fetchImpl, env, `checkout/sessions/${object.id}?expand[]=line_items`);
-    if (session.mode === 'subscription') {
-      await subscriptions.checkoutCompleted(session);
-      return json({ received: true });
-    }
-    if (session.payment_status !== 'paid') return json({ received: true });
-    const item = session.line_items?.data;
-    const owner = session.client_reference_id;
-    if (session.mode !== 'payment' || session.currency !== 'usd' || session.amount_subtotal !== 499 ||
-      !Number.isSafeInteger(session.amount_total) || session.amount_total < 499 ||
-      session.livemode !== (env.STRIPE_LIVE_MODE === 'true') ||
-      !Array.isArray(item) || item.length !== 1 || item[0].price?.id !== env.STRIPE_PRICE_ID || item[0].quantity !== 1 ||
-      typeof session.payment_intent !== 'string') fail(400, 'Unexpected paid product.');
-    const checkout = await stmt(env.DB, 'SELECT installation_id FROM checkouts WHERE id=?', session.metadata?.clickit_checkout || '').first();
-    if (!checkout || checkout.installation_id !== owner) fail(400, 'Checkout owner does not match.');
-    const intent = await stripe(fetchImpl, env, `payment_intents/${encodeURIComponent(session.payment_intent)}?expand[]=latest_charge.balance_transaction`);
-    const refunded = Math.max(0, Math.min(session.amount_total, intent.latest_charge?.amount_refunded || 0));
-    const fee = intent.latest_charge?.balance_transaction;
-    await env.DB.batch([
-      stmt(env.DB, `INSERT INTO orders(session_id,installation_id,payment_intent,amount,currency,credits,total_amount,tax_amount,stripe_fee,stripe_fee_currency,created_at)
-        VALUES(?,?,?,499,'usd',500,?,?,?,?,?) ON CONFLICT(session_id) DO NOTHING`, session.id, owner, session.payment_intent,
-        session.amount_total, session.total_details?.amount_tax ?? 0,
-        Number.isSafeInteger(fee?.fee) ? fee.fee : null, typeof fee?.currency === 'string' ? fee.currency : null, now),
-      stmt(env.DB, 'UPDATE orders SET refunded_amount=MAX(refunded_amount,?) WHERE session_id=?', refunded, session.id),
-      stmt(env.DB, `INSERT INTO credit_lots(id,installation_id,order_id,granted,created_at)
-        SELECT ?,installation_id,session_id,500,? FROM orders WHERE session_id=? ON CONFLICT(order_id) DO NOTHING`, `paid:${session.id}`, now, session.id),
-      stmt(env.DB, `UPDATE credit_lots SET revoked=MAX(revoked,(SELECT MIN(500,(refunded_amount*500+total_amount-1)/total_amount)
-        FROM orders WHERE session_id=credit_lots.order_id)) WHERE order_id=?`, session.id)
-    ]);
-  } else if (notification.type === 'charge.refunded') {
-    if (typeof object?.payment_intent !== 'string' || !Number.isSafeInteger(object.amount_refunded) || object.amount_refunded < 0) fail(400, 'Invalid refund.');
-    await revoke(env.DB, object.payment_intent, object.amount_refunded);
-  }
+  await billingService({ env, fetchImpl, now, fail }).handleEvent(notification);
   return json({ received: true });
-}
-async function revoke(db, intent, amount) {
-  await db.batch([
-    stmt(db, 'UPDATE orders SET refunded_amount=MAX(refunded_amount,MIN(total_amount,?)) WHERE payment_intent=?', amount, intent),
-    stmt(db, `UPDATE credit_lots SET revoked=MAX(revoked, (SELECT MIN(500,(refunded_amount*500+total_amount-1)/total_amount)
-      FROM orders WHERE session_id=credit_lots.order_id)) WHERE order_id IN (SELECT session_id FROM orders WHERE payment_intent=?)`, intent)
-  ]);
 }
 
 export function createWorker({ fetchImpl = (...args) => fetch(...args), now = () => Date.now() } = {}) {
@@ -163,6 +106,7 @@ export function createWorker({ fetchImpl = (...args) => fetch(...args), now = ()
       const origin = request.headers.get('Origin');
       const cors = origin && allowed.includes(origin) ? { 'Access-Control-Allow-Origin': origin,
         'Access-Control-Allow-Headers': 'Authorization, Content-Type', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', Vary: 'Origin' } : {};
+      let response;
       try {
         if (url.pathname === '/launch.json' && request.method === 'GET') return json({
           storeUrl: env.STORE_URL || '', supportUrl: env.SUPPORT_URL || '',
@@ -172,19 +116,18 @@ export function createWorker({ fetchImpl = (...args) => fetch(...args), now = ()
         if (url.pathname === '/v1/stripe/webhook' && request.method === 'POST') return await webhook(request, env, fetchImpl, now());
         if (origin && !allowed.includes(origin)) fail(403, 'This client origin is not enabled.');
         if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
-        const response = await route(request, env, url, fetchImpl, now());
-        return new Response(response.body, { status: response.status, headers: { ...Object.fromEntries(response.headers), ...cors } });
+        response = await route(request, env, url, fetchImpl, now());
       } catch (error) {
         // Do not log exceptions or provider bodies: they can contain quiz content or screenshots.
-        return new Response(JSON.stringify({ error: error instanceof HttpError ? error.message : 'Service unavailable. Please try again later.' }), {
-          status: error instanceof HttpError ? error.status : 503,
-          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...cors }
-        });
+        response = json({ error: error instanceof HttpError ? error.message : 'Service unavailable. Please try again later.' },
+          error instanceof HttpError ? error.status : 503);
       }
+      for (const [name, value] of Object.entries(cors)) response.headers.set(name, value);
+      return response;
     },
     async scheduled(_controller, env) {
       await cleanup(env.DB, now());
-      await billing(env, fetchImpl, now()).scheduled();
+      await billingService({ env, fetchImpl, now: now(), fail }).scheduled();
     }
   };
 }
@@ -192,6 +135,7 @@ export function createWorker({ fetchImpl = (...args) => fetch(...args), now = ()
 async function route(request, env, url, fetchImpl, now) {
   const db = env.DB;
   if (!db) fail(503, 'Hosted service is not configured.');
+  const service = billingService({ env, fetchImpl, now, fail });
   if (request.method === 'POST' && url.pathname === '/v1/installations') {
     if (env.TRIAL_ENABLED !== 'true' || !env.IP_HASH_SECRET) fail(503, 'The free pilot is not open yet.');
     const data = await bodyJSON(request, 1024);
@@ -211,7 +155,7 @@ async function route(request, env, url, fetchImpl, now) {
         SELECT ?,id,10,? FROM installations WHERE id=?`, `trial:${id}`, now, id)
     ]);
     if (!result[0].meta.changes) fail(429, 'The trial limit has been reached. Try later or contact support.');
-    return json({ credential, installationId: id, ...await billing(env, fetchImpl, now).snapshot(id) }, 201);
+    return json({ credential, installationId: id, ...await service.snapshot(id) }, 201);
   }
   const id = await identity(request, db);
   await expire(db, now);
@@ -220,12 +164,10 @@ async function route(request, env, url, fetchImpl, now) {
       stmt(db, `INSERT INTO events(installation_id,kind,created_at) SELECT id,'session_started',? FROM installations WHERE id=? AND last_seen_at<?`, now, id, now - 1800000),
       stmt(db, 'UPDATE installations SET last_seen_at=? WHERE id=?', now, id)
     ]);
-    return json(await billing(env, fetchImpl, now).snapshot(id));
+    return json(await service.snapshot(id));
   }
   if (request.method === 'POST' && ['/v1/checkout', '/v1/subscription/preview', '/v1/subscription/change', '/v1/billing-portal'].includes(url.pathname)) {
-    const service = billing(env, fetchImpl, now);
     const data = await bodyJSON(request, 4096);
-    if (!data || typeof data !== 'object' || Array.isArray(data)) fail(400, 'Invalid billing request.');
     if (url.pathname === '/v1/checkout') return json(await service.checkout(id, data));
     if (url.pathname === '/v1/subscription/preview') return json(await service.preview(id, data));
     if (url.pathname === '/v1/subscription/change') return json(await service.change(id, data));
@@ -292,7 +234,7 @@ async function route(request, env, url, fetchImpl, now) {
     if (data.delivered && row.status === 'reserved') fail(409, 'No validated answer is ready.');
     await stmt(db, `UPDATE requests SET status=?,completed_at=? WHERE id=? AND installation_id=? AND status IN ('reserved','ready')`,
       data.delivered ? 'settled' : 'released', now, data.requestId, id).run();
-    return json(await billing(env, fetchImpl, now).snapshot(id));
+    return json(await service.snapshot(id));
   }
   fail(404, 'Endpoint not found.');
 }

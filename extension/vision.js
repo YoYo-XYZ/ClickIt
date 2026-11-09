@@ -50,11 +50,6 @@
       width: (box.right - box.left) * width / content.width * viewport.width,
       height: (box.bottom - box.top) * height / content.height * viewport.height };
   }
-  function point(image, box, viewport) {
-    const rect = region(image, box, viewport);
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-  }
-
   // Serialized into the isolated page context. No question extraction or API settings enter the page.
   function install() {
     globalThis.ClickItPage?.cancel();
@@ -195,5 +190,5 @@
     };
     return { width: innerWidth, height: innerHeight };
   }
-  globalThis.ClickItVision = { capture, prepare, region, point, install };
+  globalThis.ClickItVision = { capture, prepare, region, install };
 })();

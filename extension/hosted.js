@@ -10,13 +10,13 @@
     pending = stored.hostedPending || {};
     billingOperation = stored.hostedBillingOperation || null;
   });
-  function configured() {
+  const configured = (() => {
     try { const url = new URL(config.apiUrl); return url.protocol === 'https:' && url.origin === config.apiUrl; }
     catch { return false; }
-  }
+  })();
   async function api(path, data, options = {}) {
     await ready;
-    if (!configured()) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
+    if (!configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
     const response = await fetch(`${config.apiUrl}/v1/${path}`, {
       method: data === undefined ? 'GET' : 'POST',
       headers: { ...(options.anonymous ? {} : { Authorization: `Bearer ${options.credential || credential}` }),
@@ -48,7 +48,7 @@
   }
   async function refresh(force = false) {
     await ready;
-    if (!credential || !configured()) return;
+    if (!credential || !configured) return;
     if (refreshing) return refreshing;
     if (!force && Date.now() - lastRefresh < 15000) return;
     refreshing = (async () => {
@@ -63,7 +63,7 @@
     let error = '';
     try { await refresh(force); } catch (e) { error = e.message; }
     await ready;
-    return { configured: configured(), registered: Boolean(credential), credential,
+    return { configured, registered: Boolean(credential), credential,
       balance: cached, pending: Object.keys(pending).length, billingOperationPending: Boolean(billingOperation), error };
   }
   async function register(consent) {
@@ -92,17 +92,9 @@
     await chrome.storage.local.set({ hostedPending: pending });
     const result = await api('answers', { requestId: job.hostedRequestId, mode,
       ...(mode === 'vision' ? { image: q.data } : { question: q }) }, { signal: job.controller.signal });
-    const r = result.result;
     // Validate again before any page interaction. The backend never returns executable code.
-    if (mode === 'text') {
-      if (!r || !Number.isInteger(r.index) || r.index < 0 || r.index >= q.options.length ||
-        !Number.isFinite(r.confidence) || r.confidence < 0 || r.confidence > 1) throw new Error('Hosted service returned an invalid answer.');
-    } else {
-      const response = { model: 'jev-1.14.0', answers: { ready: { type: 'noul', noul: 1 } } };
-      for (const name of ['question', 'choices', 'target']) response.answers[name] = { type: 'box', box: r?.boxes?.[name], confidence: r?.confidence };
-      ClickIt.parseVision(response, 'typesafe');
-    }
-    return { ...r, apiMs: result.apiMs };
+    const validated = mode === 'text' ? ClickIt.validateAnswer(result.result, q.options.length) : ClickIt.validateVision(result.result);
+    return { ...validated, apiMs: result.apiMs };
   }
   async function complete(job, delivered) {
     if (!job.hostedRequestId) return true;
@@ -113,20 +105,19 @@
     return !Object.hasOwn(pending, job.hostedRequestId);
   }
   async function openStripe(path, data, origin) {
-    await ready;
     const result = await api(path, data, { signal: AbortSignal.timeout(30000) });
     if (new URL(result.url).origin !== origin) throw new Error('Invalid payment URL.');
     await chrome.tabs.create({ url: result.url });
     return { opened: true };
   }
-  async function checkout(planId) {
+  function checkout(planId) {
     return openStripe('checkout', { checkoutId: crypto.randomUUID(), planId }, 'https://checkout.stripe.com');
   }
-  async function portal() { return openStripe('billing-portal', {}, 'https://billing.stripe.com'); }
-  async function preview() { return api('subscription/preview', { planId: 'plus' }, { signal: AbortSignal.timeout(30000) }); }
+  function portal() { return openStripe('billing-portal', {}, 'https://billing.stripe.com'); }
+  function preview() { return api('subscription/preview', { planId: 'plus' }, { signal: AbortSignal.timeout(30000) }); }
   async function change(action, quoteId) {
     await ready;
-    const stored = (await chrome.storage.local.get('hostedBillingOperation')).hostedBillingOperation;
+    const stored = billingOperation;
     const data = stored && stored.action === action && stored.quoteId === quoteId ? stored : { action, quoteId, changeId: crypto.randomUUID() };
     billingOperation = data;
     await chrome.storage.local.set({ hostedBillingOperation: data });

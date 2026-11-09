@@ -188,6 +188,23 @@ test('lost Checkout and upgrade responses retry the same remote operation withou
   assert.equal((await s.req('subscription/change', {changeId,action:'upgrade',quoteId:quote.quoteId}, other.credential)).status,403);
 });
 
+test('billing retries return the current balance and the recorded outcome', async t => {
+  const s = await subscriptions(t); const user = await s.register(); await s.complete(user);
+  const data = { changeId: crypto.randomUUID(), action: 'cancel' };
+  const initial = await (await s.req('subscription/change', data, user.credential)).json();
+  // Previously stored operations include a full snapshot. It must not overwrite today's balance.
+  s.db.sql.prepare('UPDATE billing_operations SET result=? WHERE id=?').run(JSON.stringify(initial), data.changeId);
+  const answer = await s.solve(user.credential);
+  assert.equal(answer.response.status, 200);
+  await s.req('answers/complete', { requestId: answer.requestId, delivered: true }, user.credential);
+  const retry = await (await s.req('subscription/change', data, user.credential)).json();
+  assert.equal(retry.credits, initial.credits - 1);
+  assert.equal(retry.changed, true);
+  // An expired, reconciled upgrade can be recorded as unchanged.
+  s.db.sql.prepare('UPDATE billing_operations SET result=? WHERE id=?').run(JSON.stringify({ changed: false }), data.changeId);
+  assert.equal((await (await s.req('subscription/change', data, user.credential)).json()).changed, false);
+});
+
 test('concurrent checkout attempts serialize across handlers and changing tiers expires the old session', async t => {
   const s=await subscriptions(t); const user=await s.register();
   let entered, release;

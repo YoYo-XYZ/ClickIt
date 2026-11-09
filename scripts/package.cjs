@@ -2,11 +2,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { parseArgs } = require('node:util');
 const root = path.resolve(__dirname, '..');
-const args = process.argv.slice(2);
-function argument(name) { return args[args.indexOf(name) + 1]; }
-const rawUrl = args.includes('--api-url') ? argument('--api-url') : '';
-const supportUrl = args.includes('--support-url') ? argument('--support-url') : 'mailto:thammatorn.j@gmail.com';
+const { values: { 'api-url': rawUrl = '', 'support-url': supportUrl } } = parseArgs({
+  options: { 'api-url': { type: 'string' }, 'support-url': { type: 'string', default: 'mailto:thammatorn.j@gmail.com' } }
+});
 let apiUrl = '';
 if (rawUrl) {
   const parsed = new URL(rawUrl);
@@ -18,11 +18,7 @@ const output = path.join(root, 'dist', 'extension');
 // Remove only this generated directory so stale files never enter a release ZIP.
 if (path.relative(path.join(root, 'dist'), output) !== 'extension') throw new Error('Unexpected package output path.');
 fs.rmSync(output, { recursive: true, force: true });
-fs.mkdirSync(output, { recursive: true });
-for (const name of fs.readdirSync(path.join(root, 'extension'))) {
-  const source = path.join(root, 'extension', name);
-  fs.cpSync(source, path.join(output, name), { recursive: true });
-}
+fs.cpSync(path.join(root, 'extension'), output, { recursive: true });
 fs.writeFileSync(path.join(output, 'config.js'), `globalThis.ClickItConfig = Object.freeze(${JSON.stringify({ apiUrl, supportUrl })});\n`);
 const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'));
 if (apiUrl) manifest.host_permissions.push(`${apiUrl}/*`);

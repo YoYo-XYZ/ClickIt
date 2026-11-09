@@ -36,7 +36,7 @@ before(async () => {
       const route = new URL(url).pathname;
       const body = init.body ? JSON.parse(init.body) : null;
       hostedCalls.push({ route, body, authorization: init.headers?.Authorization });
-      const balance = () => ({ credits: serverCredits, reserved: 0, checkoutEnabled: hostedMock.checkoutEnabled, visionEnabled: false,
+      const balance = () => ({ credits: serverCredits, reserved: 0, checkoutEnabled: hostedMock.checkoutEnabled, visionEnabled: hostedMock.visionEnabled || false,
         monthlyCredits: hostedMock.monthlyCredits || 0, otherCredits: serverCredits-(hostedMock.monthlyCredits || 0),
         subscription: hostedMock.subscription || null, billingManagementAvailable: Boolean(hostedMock.subscription) });
       if (route === '/v1/installations') return Response.json({ credential: `ci_${'a'.repeat(64)}`, installationId: 'test-installation', ...balance() });
@@ -67,7 +67,7 @@ before(async () => {
           const timer = setTimeout(resolve, hostedMock.delay);
           init.signal.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted','AbortError')); }, { once: true });
         });
-        return Response.json({ requestId: body.requestId, result: { index: 1, confidence: .97 }, apiMs: 30 });
+        return Response.json({ requestId: body.requestId, result: hostedMock.result ?? { index: 1, confidence: .97 }, apiMs: 30 });
       }
       throw new Error('Unexpected network request');
     };
@@ -163,6 +163,44 @@ test('changed questions and timeouts release reservations without selecting answ
   }
 });
 
+test('malformed hosted Text and Vision results release the credit without clicking', async () => {
+  const box = { left: .1, top: .1, right: .9, bottom: .9 };
+  const boxes = { question: box, choices: box, target: box };
+  try {
+    for (const [mode, result] of [
+      ['text', { index: 2, confidence: .9 }],
+      ['text', { index: 1.5, confidence: .9 }],
+      ['text', { index: 1, confidence: 2 }],
+      ['vision', { boxes: {}, confidence: .9 }],
+      ['vision', { boxes: { ...boxes, target: { ...box, right: 2 } }, confidence: .9 }],
+      ['vision', { boxes: { ...boxes, target: { ...box, left: .9, right: .1 } }, confidence: .9 }],
+      ['vision', { boxes, confidence: -1 }]
+    ]) {
+      await worker.evaluate(async ({ mode, result }) => {
+        settings.mode = mode;
+        hostedCalls.length = 0;
+        Object.assign(hostedMock, { delay: 0, visionEnabled: true, result });
+        await ClickItHosted.state(true);
+      }, { mode, result });
+      await scenario(async (quiz, controls) => {
+        assert.equal((await start(controls)).ok, true);
+        await finish();
+        assert.equal(await quiz.evaluate(() => clicks), 0);
+        const calls = await worker.evaluate(() => hostedCalls);
+        assert.equal(calls.find(c => c.route === '/v1/answers').body.mode, mode);
+        assert.equal(calls.find(c => c.route === '/v1/answers/complete').body.delivered, false);
+      });
+    }
+  } finally {
+    await worker.evaluate(async () => {
+      settings.mode = 'text';
+      delete hostedMock.result;
+      hostedMock.visionEnabled = false;
+      await ClickItHosted.state(true);
+    });
+  }
+});
+
 test('offline completion persists the settlement and retries instead of making another paid request', async () => {
   await worker.evaluate(() => { hostedCalls.length = 0; hostedMock.delay = 0; hostedMock.failCompletion = true; settings.timeoutMs = 5000; });
   await scenario(async (_quiz, controls) => {
@@ -241,6 +279,7 @@ test('reopening the popup can retry a lost billing response using the original c
     await controls.locator('#upgradePlan').click();await controls.locator('#upgradeQuote').waitFor({state:'visible'});
     await controls.locator('#confirmUpgrade').click();
     await until(async()=>(await controls.locator('#message').textContent()).includes('Billing response lost'));
+    assert.equal(await controls.locator('#upgradeQuote').isVisible(), true);
     await controls.close();controls=await popup();
     await controls.locator('#retryBilling').waitFor({state:'visible'});
     await controls.locator('#retryBilling').click();

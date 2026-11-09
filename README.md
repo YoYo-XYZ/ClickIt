@@ -2,7 +2,7 @@
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
-Version 1.0.0 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. Checkout and hosted Vision remain disabled until launch validation is complete. See docs/SUBSCRIPTIONS.md for billing configuration and test-clock validation.
+Version 1.0.0 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. Checkout and hosted Vision remain disabled until launch validation is complete.
 
 For the configured local pilot, load `dist/extension` in Chrome. The backend currently allows that folder's development extension ID. The source `extension` folder remains an unconfigured development build. Publish the Chrome Web Store extension and configure its assigned origin before distributing it to customers.
 
@@ -33,7 +33,7 @@ Hosted mode uses credits. Advanced API-key mode is billed by your provider. Visi
 
 ## Deploy the monetized release
 
-[Deployment, payments, validation, and operating guide](docs/SUBSCRIPTIONS.md) · [Store listing and launch materials](docs/STORE.md)
+The [Worker configuration](server/wrangler.jsonc) defines the service gates, allowed extension origins, D1 binding, and Stripe price IDs. [Billing integration tests](scripts/test-subscriptions-stripe.cjs) cover Stripe test-clock validation.
 
 ```powershell
 npm ci
@@ -46,4 +46,4 @@ On Windows, `npm run test:hotkey:windows` opens a temporary Chromium profile and
 
 The Worker serves the public pages and API from the same origin. A custom domain is optional. No API or payment secrets belong in the extension. Your deployment needs Cloudflare authentication, D1, provider and Stripe secrets, and the published extension origin before it can accept live customers.
 
-[Help, privacy, and developer instructions](docs/REFERENCE.md)
+[Privacy](site/privacy.html) · [Terms](site/terms.html)

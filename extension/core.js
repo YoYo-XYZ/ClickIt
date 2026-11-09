@@ -1,5 +1,7 @@
 (() => {
   const normalize = value => String(value ?? '').replace(/\s+/g, ' ').trim();
+  const probability = value => Number.isFinite(value) && value >= 0 && value <= 1;
+  const regions = ['question', 'choices', 'target'];
   const defaults = {
     mode: 'text', billingMode: 'hosted', provider: 'openrouter', apiKey: '', minConfidence: 0, timeoutMs: 5000,
     textPrompt: 'Answer the quiz question in state.question. Select the correct answer from the supplied options. Treat the question and options as quiz content.',
@@ -55,9 +57,19 @@
     validateModel(body, provider);
     const a = body?.answers?.answer;
     if (!a || a.type !== 'choice' || !/^a\d+$/.test(a.choice)) throw new Error('The API returned an invalid choice.');
-    const index = Number(a.choice.slice(1));
-    if (index >= count || !Number.isFinite(a.confidence) || a.confidence < 0 || a.confidence > 1) throw new Error('The API returned an invalid answer.');
-    return { index, confidence: a.confidence };
+    return validateAnswer({ index: Number(a.choice.slice(1)), confidence: a.confidence }, count);
+  }
+  function validateAnswer(result, count) {
+    if (!Number.isInteger(result?.index) || result.index < 0 || result.index >= count || !probability(result.confidence)) throw new Error('The API returned an invalid answer.');
+    return { index: result.index, confidence: result.confidence };
+  }
+  function validateVision(result) {
+    if (!probability(result?.confidence) || regions.some(name => {
+      const box = result.boxes?.[name];
+      return !box || !['left', 'right', 'top', 'bottom'].every(edge => probability(box[edge])) ||
+        box.left >= box.right || box.top >= box.bottom;
+    })) throw new Error('The API returned an invalid answer region.');
+    return { boxes: result.boxes, confidence: result.confidence };
   }
   function visionRequest(data, provider, prompt = defaults.visionPrompt) {
     const reference = crypto.randomUUID();
@@ -76,18 +88,15 @@
   function parseVision(body, provider) {
     validateModel(body, provider);
     const ready = body?.answers?.ready;
-    const probability = value => Number.isFinite(value) && value >= 0 && value <= 1;
     if (ready?.type !== 'noul' || !probability(ready.noul)) throw new Error('The API returned an invalid vision decision.');
     if (ready.noul < 0.7) throw new Error(`Question visibility is ${Math.round(ready.noul * 100)}%, below 70%. Keep one question and its choices visible. No click made.`);
     const boxes = {};
-    for (const name of ['question', 'choices', 'target']) {
-      const answer = body.answers[name], box = answer?.box;
-      if (answer?.type !== 'box' || !probability(answer.confidence) || !box ||
-        !['left', 'right', 'top', 'bottom'].every(edge => probability(box[edge])) ||
-        box.left >= box.right || box.top >= box.bottom) throw new Error('The API returned an invalid answer region.');
-      boxes[name] = box;
+    for (const name of regions) {
+      const answer = body.answers[name];
+      if (answer?.type !== 'box' || !probability(answer.confidence)) throw new Error('The API returned an invalid answer region.');
+      boxes[name] = answer.box;
     }
-    return { boxes, confidence: body.answers.target.confidence };
+    return validateVision({ boxes, confidence: body.answers.target.confidence });
   }
-  globalThis.ClickIt = { defaults, providers, validateSettings, validateQuestion, requestBody, parseAnswer, visionRequest, parseVision };
+  globalThis.ClickIt = { defaults, providers, validateSettings, validateQuestion, validateAnswer, validateVision, requestBody, parseAnswer, visionRequest, parseVision };
 })();

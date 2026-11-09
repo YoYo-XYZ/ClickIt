@@ -106,6 +106,22 @@ test('global budget, request limits, disabled Vision, gates, and payload bounds 
   assert.equal(cors.headers.get('access-control-allow-origin'), 'chrome-extension://test');
 });
 
+test('API bodies must be JSON objects before registration, billing, or inference', async t => {
+  const s = await setup(t);
+  const user = await s.register();
+  for (const route of ['installations', 'checkout', 'subscription/preview', 'subscription/change', 'billing-portal', 'answers', 'answers/complete']) {
+    for (const data of [null, [], 'invalid', 1, true]) {
+      const response = await s.req(route, data, user.credential, { Origin: 'chrome-extension://test' });
+      assert.equal(response.status, 400, `${route}: ${JSON.stringify(data)}`);
+      assert.equal(response.headers.get('access-control-allow-origin'), 'chrome-extension://test');
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+    }
+  }
+  assert.equal(s.calls.length, 0);
+  assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM installations').get().n, 1);
+  assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM requests').get().n, 0);
+});
+
 test('legacy purchases still fulfill once through signed webhooks, and new purchases require a subscription plan', async t => {
   const s = await setup(t);
   const user = await s.register();

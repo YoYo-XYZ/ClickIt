@@ -16,7 +16,7 @@ async function background(overrides = {}) {
     AbortController, performance, setTimeout, clearTimeout,
     ClickItVision: {
       install: () => {}, capture: async () => 'image', prepare: async () => ({}),
-      point: () => ({ x: 10, y: 10 }), region: () => ({ x: 0, y: 0, width: 20, height: 20 })
+      region: () => ({ x: 0, y: 0, width: 20, height: 20 })
     },
     ClickItHosted: {
       state: async () => { if (overrides.waitForSetup) await pending; return hosted; },

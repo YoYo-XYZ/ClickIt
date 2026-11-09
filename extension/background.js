@@ -142,8 +142,8 @@ async function run(tabId, job, config) {
       if (x < choices.left || x > choices.right || y < choices.top || y > choices.bottom) {
         throw new Error('The answer target is outside the answer choices. No click made.');
       }
-      clickTarget = V.point(q, answerBox, snapshot.result);
       targetRegion = V.region(q, answerBox, snapshot.result);
+      clickTarget = { x: targetRegion.x + targetRegion.width / 2, y: targetRegion.y + targetRegion.height / 2 };
       const regions = [result.boxes.question, choices, answerBox];
       await pageCall('watch', clickTarget, regions.map(box => V.region(q, box, snapshot.result)));
       job.controller.signal.throwIfAborted();
@@ -171,6 +171,16 @@ async function run(tabId, job, config) {
   }
 }
 
+const accountActions = {
+  startTrial: message => ClickItHosted.register(message),
+  refreshBalance: () => ClickItHosted.state(true),
+  checkout: message => ClickItHosted.checkout(message.planId),
+  restoreAccess: message => ClickItHosted.restore(message.credential),
+  billingPortal: () => ClickItHosted.portal(),
+  previewUpgrade: () => ClickItHosted.preview(),
+  changeSubscription: message => ClickItHosted.change(message.action, message.quoteId),
+  retryBilling: () => ClickItHosted.retryChange()
+};
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   // Page scripts have no API or settings access. Messages must come from the popup.
   if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL('popup.html')) return;
@@ -181,16 +191,9 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (message.opened && tab?.id && !jobs.has(tab.id)) toolbar(tab.id);
       return { settings, hosted: await ClickItHosted.state(), busy: jobs.has(tab?.id) || (settings.billingMode === 'hosted' && jobs.size > 0), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
     }
-    if (['startTrial', 'refreshBalance', 'checkout', 'restoreAccess', 'billingPortal', 'previewUpgrade', 'changeSubscription', 'retryBilling'].includes(message.type)) {
+    if (Object.hasOwn(accountActions, message.type)) {
       if (jobs.size) throw new Error('Wait for the current answer before changing credits or access.');
-      if (message.type === 'startTrial') return ClickItHosted.register(message);
-      if (message.type === 'refreshBalance') return ClickItHosted.state(true);
-      if (message.type === 'restoreAccess') return ClickItHosted.restore(message.credential);
-      if (message.type === 'billingPortal') return ClickItHosted.portal();
-      if (message.type === 'previewUpgrade') return ClickItHosted.preview();
-      if (message.type === 'changeSubscription') return ClickItHosted.change(message.action, message.quoteId);
-      if (message.type === 'retryBilling') return ClickItHosted.retryChange();
-      return ClickItHosted.checkout(message.planId);
+      return accountActions[message.type](message);
     }
     if (message.type === 'save') {
       if (jobs.size) throw new Error('Wait for the current answer before saving settings.');

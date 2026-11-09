@@ -16,21 +16,32 @@ async function send(message) {
   return reply.data;
 }
 function controls() {
-  $('answerNow').disabled = !loaded || sending || running;
+  const busy = !loaded || sending || running;
+  for (const control of document.querySelectorAll('#answerNow, #mode, #settings button, #hostedPanel button, #restoreAccess, #subscriptionPlan')) control.disabled = busy;
   const label = running ? 'Answering…' : 'Answer';
   $('answerLabel').textContent = label;
   $('answerNow').setAttribute('aria-label', label);
   $('answerNow').setAttribute('aria-busy', String(running));
-  $('saveSettings').disabled = !loaded || sending || running;
-  $('mode').disabled = !loaded || sending || running;
-  $('resetPrompt').disabled = !loaded || sending || running;
-  for (const id of ['refreshBalance', 'buyCredits', 'restoreAccess', 'subscriptionPlan', 'upgradePlan', 'downgradePlan', 'keepPlan', 'manageSubscription', 'cancelSubscription', 'resumeSubscription', 'confirmUpgrade', 'dismissUpgrade', 'retryBilling']) $(id).disabled = !loaded || sending || running;
-  $('startTrial').disabled = !loaded || sending || running || !hosted?.configured || !$('adultConsent').checked || !$('dataConsent').checked;
+  $('startTrial').disabled ||= !hosted?.configured || !$('adultConsent').checked || !$('dataConsent').checked;
   $('buyCredits').disabled ||= !hosted?.balance?.checkoutEnabled;
   $('upgradePlan').disabled ||= !hosted?.balance?.checkoutEnabled;
   $('downgradePlan').disabled ||= !hosted?.balance?.checkoutEnabled;
   $('manageSubscription').disabled ||= !hosted?.balance?.billingManagementAvailable;
   $('confirmUpgrade').disabled ||= !upgradeQuote || Date.now() >= upgradeQuote.expiresAt;
+}
+async function withAction(action) {
+  if (!loaded || sending || running) return false;
+  sending = true;
+  controls();
+  $('message').textContent = '';
+  try {
+    await modeSave;
+    await action();
+    return true;
+  } catch (error) {
+    $('message').textContent = error.message;
+    return false;
+  } finally { sending = false; controls(); }
 }
 function showBilling() {
   const byok = $('billingMode').value === 'byok';
@@ -165,9 +176,7 @@ $('mode').addEventListener('change', () => {
 });
 $('settings').addEventListener('submit', async event => {
   event.preventDefault();
-  sending = true; controls();
-  try {
-    await modeSave;
+  await withAction(async () => {
     const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, key === 'mode' ? selectedMode() : ($(key)?.value ?? saved[key])])));
     await send({ type: 'save', settings });
     saved = settings;
@@ -175,34 +184,27 @@ $('settings').addEventListener('submit', async event => {
     $('message').textContent = 'Saved.';
     showSettings(false);
     showBilling();
-  } catch (error) { $('message').textContent = error.message; }
-  finally { sending = false; controls(); }
+  });
 });
 $('answerNow').addEventListener('click', async () => {
-  if (sending || running) return;
-  sending = true; controls();
-  $('message').textContent = '';
-  try {
-    await modeSave;
-    await send({ type: 'answer' });
-    await refresh();
-  } catch (error) {
-    $('message').textContent = error.message;
-    if (error.message.includes('API key')) { showSettings(true); $('apiKey').focus(); }
-  } finally { sending = false; controls(); }
+  await withAction(async () => {
+    try {
+      await send({ type: 'answer' });
+      await refresh();
+    } catch (error) {
+      if (error.message.includes('API key')) { showSettings(true); $('apiKey').focus(); }
+      throw error;
+    }
+  });
 });
 for (const id of ['adultConsent', 'dataConsent']) $(id).addEventListener('change', controls);
-async function accountAction(message) {
-  if (sending || running) return;
-  sending = true; controls();
-  try {
-    await modeSave;
+function accountAction(message) {
+  return withAction(async () => {
     await send(message);
-    $('message').textContent = message.type === 'restoreAccess' ? 'Credit access restored.' : '';
+    if (message.type === 'restoreAccess') $('message').textContent = 'Credit access restored.';
     await refresh();
     if (message.type === 'startTrial') $('hostedAccessKey').value = hosted.credential;
-  } catch (error) { $('message').textContent = error.message; }
-  finally { sending = false; controls(); }
+  });
 }
 $('startTrial').addEventListener('click', () => accountAction({ type: 'startTrial', adultConsent: $('adultConsent').checked, dataConsent: $('dataConsent').checked }));
 $('refreshBalance').addEventListener('click', () => accountAction({ type: 'refreshBalance' }));
@@ -212,21 +214,18 @@ $('retryBilling').addEventListener('click', () => accountAction({ type: 'retryBi
 for (const [id, action] of Object.entries({ downgradePlan: 'downgrade', keepPlan: 'keep_plan', cancelSubscription: 'cancel', resumeSubscription: 'resume' })) {
   $(id).addEventListener('click', () => accountAction({ type: 'changeSubscription', action }));
 }
-$('upgradePlan').addEventListener('click', async () => {
-  if (sending || running) return;
-  sending = true; controls();
-  try {
-    upgradeQuote = await send({ type: 'previewUpgrade' });
-    const price = new Intl.NumberFormat(undefined, { style: 'currency', currency: upgradeQuote.currency }).format(upgradeQuote.amount / 100);
-    $('upgradeQuoteText').textContent = `Pay ${price} now to upgrade. Add ${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString()}. Then Plus renews at $9.99/month plus applicable tax. Quote valid for five minutes.`;
-    $('upgradeQuote').hidden = false;
-  } catch (error) { $('message').textContent = error.message; }
-  finally { sending = false; controls(); }
-});
+$('upgradePlan').addEventListener('click', () => withAction(async () => {
+  upgradeQuote = await send({ type: 'previewUpgrade' });
+  const price = new Intl.NumberFormat(undefined, { style: 'currency', currency: upgradeQuote.currency }).format(upgradeQuote.amount / 100);
+  $('upgradeQuoteText').textContent = `Pay ${price} now to upgrade. Add ${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString()}. Then Plus renews at $9.99/month plus applicable tax. Quote valid for five minutes.`;
+  $('upgradeQuote').hidden = false;
+}));
 $('confirmUpgrade').addEventListener('click', async () => {
   if (!upgradeQuote || Date.now() >= upgradeQuote.expiresAt) return;
-  await accountAction({ type: 'changeSubscription', action: 'upgrade', quoteId: upgradeQuote.quoteId });
-  $('upgradeQuote').hidden = true; upgradeQuote = null;
+  if (await accountAction({ type: 'changeSubscription', action: 'upgrade', quoteId: upgradeQuote.quoteId })) {
+    $('upgradeQuote').hidden = true;
+    upgradeQuote = null;
+  }
 });
 $('dismissUpgrade').addEventListener('click', () => { $('upgradeQuote').hidden = true; upgradeQuote = null; });
 $('restoreAccess').addEventListener('click', () => accountAction({ type: 'restoreAccess', credential: $('hostedAccessKey').value.trim() }));
