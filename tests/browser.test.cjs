@@ -609,6 +609,26 @@ test('Vision ignores a countdown outside the question and answer regions', async
   });
 });
 
+test('Vision ignores countdown nodes replaced in a shared quiz container', async () => {
+  for (const change of [
+    () => { const timer = document.getElementById('timer'); timer.replaceWith(timer.cloneNode(true)); },
+    () => { document.body.append(document.createTextNode('19')); },
+    () => { document.getElementById('footer-countdown').firstChild.data = '19'; }
+  ]) {
+    await configure({ mode: 'vision' }, { delay: 200 });
+    await scenario(visionFixture + '<main id="footer-countdown" style="height:600px">20</main>', async (page, controls) => {
+      await mockVision(page);
+      await start(page, controls);
+      await until(async () => (await calls()).length === 1);
+      await page.evaluate(change);
+      const result = await finished(page);
+      assert.equal(result.answer, '4', result.text);
+      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+      assert.equal(await worker.evaluate(() => captures.length), 1);
+    });
+  }
+});
+
 test('Vision allows cosmetic stylesheet and page-attribute updates during inference', async () => {
   const changes = [
     () => { document.querySelector('style').textContent += '\n#timer { color: red; }'; },
@@ -632,7 +652,11 @@ test('Vision allows cosmetic stylesheet and page-attribute updates during infere
 test('Vision cancels changed questions, choices, target controls, scrolling, resizing, and navigation', async () => {
   const changes = [
     page => page.evaluate(() => { document.getElementById('question').textContent = 'A different question?'; }),
+    page => page.evaluate(() => { document.getElementById('question').firstChild.data = 'A different question?'; }),
+    page => page.evaluate(() => { document.getElementById('question').firstChild.remove(); }),
+    page => page.evaluate(() => { document.getElementById('question').remove(); }),
     page => page.evaluate(() => { document.getElementById('option1').textContent = 'Different'; }),
+    page => page.evaluate(() => { document.getElementById('option1').remove(); }),
     page => page.evaluate(() => { const node = document.getElementById('option4'); node.replaceWith(node.cloneNode(true)); }),
     page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
     page => page.evaluate(() => scrollTo(0, 100)),
@@ -670,6 +694,19 @@ test('Vision allows canvas pixel changes during inference and takes only one scr
     assert.deepEqual(await page.evaluate(() => clicks), ['4']);
     assert.equal(await worker.evaluate(() => captures.length), 1);
     assert.equal(await page.evaluate(() => submissions), 0);
+  });
+});
+
+test('Vision detects removed question text inside a wrapper with no layout box', async () => {
+  await configure({ mode: 'vision' }, { delay: 200 });
+  const html = visionFixture.replace('What is 2 + 2?</div>', '<span id="question-text" style="display:contents">What is 2 + 2?</span></div>');
+  await scenario(html, async (page, controls) => {
+    await mockVision(page);
+    await start(page, controls);
+    await until(async () => (await calls()).length === 1);
+    await page.evaluate(() => document.getElementById('question-text').remove());
+    assert.match((await finished(page)).text, /changed/);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
   });
 });
 
@@ -717,6 +754,24 @@ test('Vision accepts real-provider confidence and rounded boxes when the target 
 const customVisionFixture = visionFixture.replace(/<button id="(option\d)">(\d)<\/button>/g,
   '<div id="$1" style="display:grid;place-items:center">$2</div>').replace('button{', '#choices>div,button{');
 const highlight = page => page.locator('[data-clickit-highlight]');
+
+test('Vision keeps a manual suggestion when an unrelated countdown updates', async () => {
+  await configure({ mode: 'vision' });
+  await scenario(customVisionFixture + '<main id="footer-countdown" style="height:600px">20</main>', async (page, controls) => {
+    await mockVision(page);
+    await start(page, controls);
+    assert.match((await finished(page)).text, /highlighted/);
+    await page.evaluate(() => {
+      const timer = document.getElementById('timer');
+      timer.replaceWith(timer.cloneNode(true));
+      document.getElementById('footer-countdown').firstChild.data = '19';
+    });
+    await delay(200);
+    assert.equal(await highlight(page).count(), 1);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+    assert.equal((await calls()).length, 1);
+  });
+});
 
 test('Vision highlights unsupported answers, keeps targeting accurate, and passes a manual click through', async () => {
   await configure({ mode: 'vision' }, { delay: 200 });

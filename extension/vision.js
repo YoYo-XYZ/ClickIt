@@ -70,15 +70,45 @@
       invalid = true;
       if (highlight) cancel();
     };
-    const intersects = rect => regions.some(region => rect.left < region.x + region.width && rect.right > region.x &&
+    const intersects = rect => rect && rect.width > 0 && rect.height > 0 && regions.some(region => rect.left < region.x + region.width && rect.right > region.x &&
       rect.top < region.y + region.height && rect.bottom > region.y);
+    const bounds = node => {
+      const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+      if (!element || element.closest('style,script')) return null;
+      if (node.nodeType === Node.ELEMENT_NODE) return node.getBoundingClientRect();
+      if (node.nodeType !== Node.TEXT_NODE) return null;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return range.getBoundingClientRect();
+    };
+    // Removed nodes have no layout by the time MutationObserver runs. Keep their
+    // previous bounds so replacing a timer does not implicate its whole container.
+    const rectangles = new WeakMap();
+    const walk = (root, visit) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+      let node = root;
+      do {
+        visit(node);
+      } while ((node = walker.nextNode()));
+    };
+    const remember = node => {
+      const rect = bounds(node);
+      if (rect) rectangles.set(node, rect);
+      return rect;
+    };
+    walk(document.documentElement, remember);
+    const recordChange = rect => {
+      if (!rect || !rect.width || !rect.height) return;
+      if (regions ? intersects(rect) : changed.length >= 1000) invalidate();
+      else if (!regions) changed.push(rect);
+    };
     const regionAppearance = () => JSON.stringify([...document.querySelectorAll('body,body *')].flatMap(node => {
       if (node === highlight) return [];
       const rect = node.getBoundingClientRect();
       if (!intersects(rect)) return [];
       const style = getComputedStyle(node);
       return [[rect.x, rect.y, rect.width, rect.height,
-        [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE).map(child => child.textContent).join(''),
+        [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE && intersects(bounds(child))).map(child => child.textContent).join(''),
         style.display, style.visibility, style.opacity, style.color, style.backgroundColor,
         style.font, style.letterSpacing, style.transform, style.filter, style.border, style.boxShadow]];
     }));
@@ -91,9 +121,16 @@
         // Styles and container attributes can update for unrelated widgets. Their actual
         // effect on the watched regions is checked visually, rather than rejecting every mutation.
         if (node.closest('style,script') || record.type === 'attributes') continue;
-        const rect = node.getBoundingClientRect();
-        if (regions ? intersects(rect) : changed.length >= 1000) invalidate();
-        else if (!regions) changed.push(rect);
+        if (record.type === 'childList') {
+          for (const removed of record.removedNodes) walk(removed, child => recordChange(rectangles.get(child)));
+          for (const added of record.addedNodes) {
+            walk(added, child => recordChange(remember(child)));
+          }
+        } else {
+          recordChange(rectangles.get(record.target));
+          recordChange(bounds(record.target));
+          remember(record.target);
+        }
       }
       if (highlight && appearance !== regionAppearance()) invalidate();
     });
