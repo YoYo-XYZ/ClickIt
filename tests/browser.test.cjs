@@ -683,7 +683,6 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
     body => { body.answers.target.box.left = -0.1; },
     body => { body.answers.target.box.left = body.answers.target.box.right; },
     body => { body.answers.target.confidence = 0.5; },
-    body => { body.answers.choices.box.right = 0.1; },
     body => { body.model = 'jev-1.13.0'; }
   ];
   for (const mutate of mutations) {
@@ -698,23 +697,26 @@ test('Vision rejects unclear, malformed, out-of-range, and low-confidence model 
   }
 });
 
-test('Vision accepts real-provider confidence and rounded boxes when the target center hits the answer', async () => {
-  await configure({ mode: 'vision' });
-  await scenario(visionFixture, async (page, controls) => {
-    await mockVision(page, body => {
-      body.answers.ready.noul = 0.8;
-      body.answers.choices.confidence = 0.5;
-      body.answers.target.confidence = 0.64;
-      body.answers.choices.box.bottom = body.answers.target.box.bottom - 0.02;
-      return body;
+test('Vision accepts an answer target outside the independent choices box for both providers', async () => {
+  for (const provider of ['typesafe', 'openrouter']) {
+    await configure({ mode: 'vision', provider });
+    await scenario(visionFixture, async (page, controls) => {
+      await mockVision(page, body => {
+        if (provider === 'openrouter') body.model = 'typesafe/jev-1.14';
+        body.answers.ready.noul = 0.8;
+        body.answers.choices.confidence = 0.5;
+        body.answers.target.confidence = 0.64;
+        body.answers.choices.box = { left: 0, top: 0, right: 0.01, bottom: 0.01 };
+        return body;
+      });
+      await start(page, controls);
+      const result = await finished(page);
+      assert.equal(result.answer, '4', result.text);
+      assert.equal(result.confidence, 0.64);
+      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+      assert.equal(await page.evaluate(() => submissions), 0);
     });
-    await start(page, controls);
-    const result = await finished(page);
-    assert.equal(result.answer, '4', result.text);
-    assert.equal(result.confidence, 0.64);
-    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-    assert.equal(await page.evaluate(() => submissions), 0);
-  });
+  }
 });
 
 const customVisionFixture = visionFixture.replace(/<button id="(option\d)">(\d)<\/button>/g,
@@ -862,7 +864,6 @@ test('Vision rejects submission, navigation, disabled, and checkbox targets with
         if (kind === 'checkbox') option.setAttribute('role', 'checkbox');
       }, kind);
       const body = await visionResponse(page, kind === 'submit' ? '#submit' : '#option4');
-      if (kind === 'submit') body.answers.choices.box.bottom = body.answers.target.box.bottom;
       await worker.evaluate(body => { mock.body = body; }, body);
       await start(page, controls);
       assert.match((await finished(page)).text, /submission|No supported/);

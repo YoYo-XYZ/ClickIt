@@ -193,14 +193,14 @@ test('scheduled retention deletes old technical history without removing balance
   assert.equal(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano, cost);
 });
 
-test('enabled hosted Vision constructs its own image request and visibility failures return the credit', async t => {
+test('hosted Vision accepts independent target boxes and visibility failures return the credit', async t => {
   const s = await setup(t, { VISION_ENABLED: 'true' });
   const user = await s.register();
   const region = box => ({ type: 'box', confidence: .95, box });
   s.state.provider = { model: 'typesafe/jev-1.14', usage: { input_tokens: 2000 }, answers: {
     ready: { type: 'noul', noul: .9 },
     question: region({ left:.1, top:.1, right:.9, bottom:.3 }),
-    choices: region({ left:.1, top:.4, right:.9, bottom:.9 }),
+    choices: region({ left:.7, top:.7, right:.9, bottom:.9 }),
     target: region({ left:.1, top:.4, right:.4, bottom:.6 })
   } };
   const requestId = crypto.randomUUID();
