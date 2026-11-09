@@ -139,9 +139,6 @@ async function run(tabId, job, config) {
     if (vision) {
       targetRegion = V.region(q, result.boxes.target, snapshot.result);
       clickTarget = { x: targetRegion.x + targetRegion.width / 2, y: targetRegion.y + targetRegion.height / 2 };
-      await pageCall('watch', clickTarget, [V.region(q, result.boxes.question, snapshot.result),
-        V.region(q, result.boxes.choices, snapshot.result), targetRegion]);
-      job.controller.signal.throwIfAborted();
     }
     const action = await pageCall('click', clickTarget, targetRegion);
     if (action.suggested) job.controller.signal.throwIfAborted();

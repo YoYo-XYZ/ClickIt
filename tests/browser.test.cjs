@@ -596,71 +596,50 @@ test('Vision maps resized, padded, and high-DPI screenshots to the correct page 
   }
 });
 
-test('Vision ignores a countdown outside the question and answer regions', async () => {
-  await configure({ mode: 'vision' }, { delay: 200 });
-  await scenario(visionFixture, async (page, controls) => {
-    await mockVision(page);
-    await start(page, controls);
-    await until(async () => (await calls()).length === 1);
-    await page.evaluate(() => { window.tick = setInterval(() => { document.getElementById('timer').textContent = String(Math.random()); }, 30); });
-    assert.equal((await finished(page)).answer, '4');
-    await page.evaluate(() => clearInterval(window.tick));
-    assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-  });
-});
-
-test('Vision ignores countdown nodes replaced in a shared quiz container', async () => {
-  for (const change of [
-    () => { const timer = document.getElementById('timer'); timer.replaceWith(timer.cloneNode(true)); },
-    () => { document.body.append(document.createTextNode('19')); },
-    () => { document.getElementById('footer-countdown').firstChild.data = '19'; }
-  ]) {
-    await configure({ mode: 'vision' }, { delay: 200 });
-    await scenario(visionFixture + '<main id="footer-countdown" style="height:600px">20</main>', async (page, controls) => {
-      await mockVision(page);
+test('Vision tolerates countdowns, identical replacements, small layout shifts, and unrelated interaction', async () => {
+  const changes = [
+    page => page.evaluate(() => {
+      const timer = document.getElementById('timer');
+      timer.replaceWith(timer.cloneNode(true));
+      document.getElementById('question').textContent = 'What is 2 + 2?';
+      document.body.setAttribute('data-slide-id', 'render-2');
+    }),
+    page => page.evaluate(() => {
+      const option = document.getElementById('option4');
+      option.replaceWith(option.cloneNode(true));
+    }),
+    page => page.evaluate(() => { document.getElementById('option4').style.transform = 'translateX(0.5px)'; }),
+    page => page.evaluate(() => { document.getElementById('timer').textContent = '19'; }),
+    async page => {
+      await page.keyboard.press('Shift');
+      await page.locator('#timer').click();
+      await page.evaluate(() => scrollTo(0, 1));
+      await page.setViewportSize({ width: 1281, height: 721 });
+    }
+  ];
+  for (const change of changes) {
+    await configure({ mode: 'vision' }, { delay: 400 });
+    await scenario(visionFixture, async (page, controls) => {
+      await mockVision(page, body => {
+        // The question box can include the countdown without making its updates fatal.
+        body.answers.question.box = { left: 0, top: 0, right: 1, bottom: 0.3 };
+        return body;
+      });
       await start(page, controls);
       await until(async () => (await calls()).length === 1);
-      await page.evaluate(change);
+      await change(page);
       const result = await finished(page);
       assert.equal(result.answer, '4', result.text);
       assert.deepEqual(await page.evaluate(() => clicks), ['4']);
+      assert.equal(await page.evaluate(() => submissions), 0);
       assert.equal(await worker.evaluate(() => captures.length), 1);
     });
   }
 });
 
-test('Vision allows cosmetic stylesheet and page-attribute updates during inference', async () => {
+test('Vision still stops disabled targets and document navigation', async () => {
   const changes = [
-    () => { document.querySelector('style').textContent += '\n#timer { color: red; }'; },
-    () => { document.querySelector('style').textContent += '\n#question { color: red; } #choices button:hover { background: yellow; }'; },
-    () => { document.body.setAttribute('data-countdown', '19'); }
-  ];
-  for (const change of changes) {
-    await configure({ mode: 'vision' }, { delay: 200 });
-    await scenario(visionFixture, async (page, controls) => {
-      await mockVision(page);
-      await start(page, controls);
-      await until(async () => (await calls()).length === 1);
-      await page.evaluate(change);
-      const result = await finished(page);
-      assert.equal(result.answer, '4', result.text);
-      assert.deepEqual(await page.evaluate(() => clicks), ['4']);
-    });
-  }
-});
-
-test('Vision cancels changed questions, choices, target controls, scrolling, resizing, and navigation', async () => {
-  const changes = [
-    page => page.evaluate(() => { document.getElementById('question').textContent = 'A different question?'; }),
-    page => page.evaluate(() => { document.getElementById('question').firstChild.data = 'A different question?'; }),
-    page => page.evaluate(() => { document.getElementById('question').firstChild.remove(); }),
-    page => page.evaluate(() => { document.getElementById('question').remove(); }),
-    page => page.evaluate(() => { document.getElementById('option1').textContent = 'Different'; }),
-    page => page.evaluate(() => { document.getElementById('option1').remove(); }),
-    page => page.evaluate(() => { const node = document.getElementById('option4'); node.replaceWith(node.cloneNode(true)); }),
     page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
-    page => page.evaluate(() => scrollTo(0, 100)),
-    page => page.setViewportSize({ width: 1300, height: 740 }),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
     page => page.reload()
   ];
@@ -674,7 +653,7 @@ test('Vision cancels changed questions, choices, target controls, scrolling, res
       await change(page);
       const result = await finished(page);
       if (page.url() !== originalUrl || change === changes.at(-1)) assert.equal(result, undefined);
-      else assert.match(result.text, /changed|supported, enabled/);
+      else assert.match(result.text, /supported, enabled/);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal((await calls()).length, 1);
     });
@@ -694,19 +673,6 @@ test('Vision allows canvas pixel changes during inference and takes only one scr
     assert.deepEqual(await page.evaluate(() => clicks), ['4']);
     assert.equal(await worker.evaluate(() => captures.length), 1);
     assert.equal(await page.evaluate(() => submissions), 0);
-  });
-});
-
-test('Vision detects removed question text inside a wrapper with no layout box', async () => {
-  await configure({ mode: 'vision' }, { delay: 200 });
-  const html = visionFixture.replace('What is 2 + 2?</div>', '<span id="question-text" style="display:contents">What is 2 + 2?</span></div>');
-  await scenario(html, async (page, controls) => {
-    await mockVision(page);
-    await start(page, controls);
-    await until(async () => (await calls()).length === 1);
-    await page.evaluate(() => document.getElementById('question-text').remove());
-    assert.match((await finished(page)).text, /changed/);
-    assert.deepEqual(await page.evaluate(() => clicks), []);
   });
 });
 
@@ -755,7 +721,7 @@ const customVisionFixture = visionFixture.replace(/<button id="(option\d)">(\d)<
   '<div id="$1" style="display:grid;place-items:center">$2</div>').replace('button{', '#choices>div,button{');
 const highlight = page => page.locator('[data-clickit-highlight]');
 
-test('Vision keeps a manual suggestion when an unrelated countdown updates', async () => {
+test('Vision keeps a manual suggestion through countdowns, cosmetic changes, and unrelated keys', async () => {
   await configure({ mode: 'vision' });
   await scenario(customVisionFixture + '<main id="footer-countdown" style="height:600px">20</main>', async (page, controls) => {
     await mockVision(page);
@@ -765,7 +731,9 @@ test('Vision keeps a manual suggestion when an unrelated countdown updates', asy
       const timer = document.getElementById('timer');
       timer.replaceWith(timer.cloneNode(true));
       document.getElementById('footer-countdown').firstChild.data = '19';
+      document.getElementById('option4').style.transform = 'translateX(0.5px)';
     });
+    await page.keyboard.press('Shift');
     await delay(200);
     assert.equal(await highlight(page).count(), 1);
     assert.deepEqual(await page.evaluate(() => clicks), []);
@@ -800,10 +768,8 @@ test('Vision highlights unsupported answers, keeps targeting accurate, and passe
   });
 });
 
-test('Vision suggestions disappear on question changes, styles, scrolling, resizing, navigation, keys, tab switches, and the next run', async () => {
+test('Vision suggestions dismiss on scrolling, resizing, navigation, Escape, tab switches, and the next run', async () => {
   const changes = [
-    page => page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; }),
-    page => page.evaluate(() => { document.getElementById('option4').style.transform = 'translateX(10px)'; }),
     page => page.evaluate(() => scrollTo(0, 50)),
     page => page.setViewportSize({ width: 1300, height: 740 }),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
@@ -851,34 +817,47 @@ test('Vision suggestions expire after eight seconds without another model reques
   });
 });
 
-test('Vision does not suggest unsupported controls when confidence is low or the captured question changes', async () => {
-  for (const stale of [false, true]) {
-    await configure({ mode: 'vision', minConfidence: 0.8 }, { delay: 200 });
-    await scenario(customVisionFixture, async (page, controls) => {
-      await mockVision(page, body => {
-        if (!stale) body.answers.target.confidence = 0.5;
-        return body;
-      });
+test('Vision does not suggest unsupported controls when confidence is low', async () => {
+  await configure({ mode: 'vision', minConfidence: 0.8 });
+  await scenario(customVisionFixture, async (page, controls) => {
+    await mockVision(page, body => { body.answers.target.confidence = 0.5; return body; });
+    await start(page, controls);
+    assert.match((await finished(page)).text, /threshold/);
+    assert.equal(await highlight(page).count(), 0);
+    assert.deepEqual(await page.evaluate(() => clicks), []);
+  });
+});
+
+test('Vision accepts answer phrases that start with navigation words', async () => {
+  for (const answer of ['Next generation', 'Start the engine', 'Continue the story']) {
+    await configure({ mode: 'vision' });
+    await scenario(visionFixture, async (page, controls) => {
+      await page.locator('#option4').evaluate((node, answer) => { node.textContent = answer; }, answer);
+      await mockVision(page);
       await start(page, controls);
-      if (stale) {
-        await until(async () => (await calls()).length === 1);
-        await page.evaluate(() => { document.getElementById('question').textContent = 'Another question?'; });
-      }
-      assert.match((await finished(page)).text, /threshold|changed/);
-      assert.equal(await highlight(page).count(), 0);
-      assert.deepEqual(await page.evaluate(() => clicks), []);
+      assert.equal((await finished(page)).answer, answer);
+      assert.deepEqual(await page.evaluate(() => clicks), [answer]);
     });
   }
 });
 
 test('Vision rejects submission, navigation, disabled, and checkbox targets without suggesting them', async () => {
-  for (const kind of ['submit', 'navigation', 'custom-navigation', 'disabled', 'checkbox']) {
+  for (const kind of ['submit', 'implicit-submit', 'navigation', 'disabled', 'checkbox']) {
     await configure({ mode: 'vision' });
     await scenario(visionFixture, async (page, controls) => {
       await page.evaluate(kind => {
         const option = document.getElementById('option4');
-        if (kind === 'navigation') option.textContent = 'Next';
-        if (kind === 'custom-navigation') option.outerHTML = '<div id="option4">Next</div>';
+        if (kind === 'implicit-submit') {
+          const form = document.createElement('form');
+          option.before(form);
+          form.append(option);
+          form.addEventListener('submit', event => { event.preventDefault(); submissions++; });
+        }
+        if (kind === 'navigation') {
+          const nav = document.createElement('nav');
+          option.before(nav);
+          nav.append(option);
+        }
         if (kind === 'disabled') option.disabled = true;
         if (kind === 'checkbox') option.setAttribute('role', 'checkbox');
       }, kind);

@@ -54,95 +54,15 @@
   // Serialized into the isolated page context. No question extraction or API settings enter the page.
   function install() {
     globalThis.ClickItPage?.cancel();
-    const geometry = () => JSON.stringify([innerWidth, innerHeight, scrollX, scrollY, devicePixelRatio,
-      visualViewport?.scale, visualViewport?.offsetLeft, visualViewport?.offsetTop]);
-    const original = geometry(), url = location.href;
     const selector = 'button,[role="button"],input[type="radio"],[role="radio"],label';
-    const describe = node => {
-      const rect = node.getBoundingClientRect();
-      return JSON.stringify([rect.x, rect.y, rect.width, rect.height, node.textContent,
-        node.getAttribute('aria-label'), node.getAttribute('aria-checked'), node.getAttribute('aria-pressed'), node.checked]);
+    let consumed = false, highlight, expiry;
+    const dismissEvents = ['scroll', 'resize', 'pagehide', 'popstate', 'hashchange', 'pointerdown', 'keydown'];
+    const dismiss = event => {
+      if (event.type !== 'keydown' || event.key === 'Escape') cancel();
     };
-    const candidates = new Map([...document.querySelectorAll(selector)].map(node => [node, describe(node)]));
-    let invalid = document.visibilityState !== 'visible';
-    let regions, appearance, highlight, expiry, monitor, changed = [];
-    const invalidate = () => {
-      invalid = true;
-      if (highlight) cancel();
-    };
-    const intersects = rect => rect && rect.width > 0 && rect.height > 0 && regions.some(region => rect.left < region.x + region.width && rect.right > region.x &&
-      rect.top < region.y + region.height && rect.bottom > region.y);
-    const bounds = node => {
-      const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-      if (!element || element.closest('style,script')) return null;
-      if (node.nodeType === Node.ELEMENT_NODE) return node.getBoundingClientRect();
-      if (node.nodeType !== Node.TEXT_NODE) return null;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      return range.getBoundingClientRect();
-    };
-    // Removed nodes have no layout by the time MutationObserver runs. Keep their
-    // previous bounds so replacing a timer does not implicate its whole container.
-    const rectangles = new WeakMap();
-    const walk = (root, visit) => {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
-      let node = root;
-      do {
-        visit(node);
-      } while ((node = walker.nextNode()));
-    };
-    const remember = node => {
-      const rect = bounds(node);
-      if (rect) rectangles.set(node, rect);
-      return rect;
-    };
-    walk(document.documentElement, remember);
-    const recordChange = rect => {
-      if (!rect || !rect.width || !rect.height) return;
-      if (regions ? intersects(rect) : changed.length >= 1000) invalidate();
-      else if (!regions) changed.push(rect);
-    };
-    const regionAppearance = () => JSON.stringify([...document.querySelectorAll('body,body *')].flatMap(node => {
-      if (node === highlight) return [];
-      const rect = node.getBoundingClientRect();
-      if (!intersects(rect)) return [];
-      const style = getComputedStyle(node);
-      return [[rect.x, rect.y, rect.width, rect.height,
-        [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE && intersects(bounds(child))).map(child => child.textContent).join(''),
-        style.display, style.visibility, style.opacity, style.color, style.backgroundColor,
-        style.font, style.letterSpacing, style.transform, style.filter, style.border, style.boxShadow]];
-    }));
-    const observer = new MutationObserver(records => {
-      for (const record of records) {
-        if (record.type === 'childList' && [...record.addedNodes, ...record.removedNodes].every(node => node === highlight)) continue;
-        const node = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
-        if (!node) continue;
-        if (['data-question-id', 'data-slide-id'].includes(record.attributeName)) invalidate();
-        // Styles and container attributes can update for unrelated widgets. Their actual
-        // effect on the watched regions is checked visually, rather than rejecting every mutation.
-        if (node.closest('style,script') || record.type === 'attributes') continue;
-        if (record.type === 'childList') {
-          for (const removed of record.removedNodes) walk(removed, child => recordChange(rectangles.get(child)));
-          for (const added of record.addedNodes) {
-            walk(added, child => recordChange(remember(child)));
-          }
-        } else {
-          recordChange(rectangles.get(record.target));
-          recordChange(bounds(record.target));
-          remember(record.target);
-        }
-      }
-      if (highlight && appearance !== regionAppearance()) invalidate();
-    });
-    observer.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
-    const events = ['scroll', 'resize', 'pagehide', 'popstate', 'hashchange', 'pointerdown', 'click', 'keydown'];
-    for (const event of events) window.addEventListener(event, invalidate, true);
-    const visibility = () => { if (document.visibilityState !== 'visible') invalidate(); };
-    document.addEventListener('visibilitychange', visibility);
 
     function check(point) {
-      if (invalid || geometry() !== original || location.href !== url ||
-        (appearance && regionAppearance() !== appearance)) throw new Error('The page or viewport changed. Press Answer again.');
+      if (consumed) throw new Error('This answer was already handled. Press Answer again.');
       const hit = document.elementFromPoint(point.x, point.y);
       if (!hit || hit.closest('[hidden],[aria-hidden="true"],[inert],[disabled],[aria-disabled="true"],nav,input:not([type="radio"]),[role="checkbox"]')) {
         throw new Error('No supported, enabled answer button at that position. No click made.');
@@ -151,26 +71,21 @@
       if (node?.matches('label')) node = node.control;
       const answerNode = node || hit;
       const answer = (answerNode.innerText || answerNode.getAttribute('aria-label') || [...answerNode.labels || []].map(label => label.innerText).join(' ')).replace(/\s+/g, ' ').trim();
-      if (/^(submit|send|vote|confirm|next|back|previous|join|continue|start|close|skip|menu|settings|save|cancel|reset)(\b|$)/i.test(answer)) {
-        throw new Error('The target is a navigation or submission button. No click made.');
-      }
       if (!node) return null;
-      if (!candidates.has(node)) throw new Error('The answer button changed. Press Answer again.');
+      if (node.matches('button[type="submit"],input[type="submit"]') || (node.form && node.type === 'submit')) {
+        throw new Error('The target is a submission button. No click made.');
+      }
       if (node.matches('input:not([type="radio"])') ||
         node.closest('[hidden],[aria-hidden="true"],[inert],[disabled],[aria-disabled="true"],nav') ||
         node.matches(':disabled') || node.querySelector('input[type="checkbox"],[role="checkbox"]')) {
         throw new Error('No supported, enabled answer button at that position. No click made.');
       }
-      if (describe(node) !== candidates.get(node)) throw new Error('The answer button changed. Press Answer again.');
       return { node, answer: answer || 'Visual answer' };
     }
     function cancel() {
-      invalid = true;
-      observer.disconnect();
-      for (const event of events) window.removeEventListener(event, invalidate, true);
-      document.removeEventListener('visibilitychange', visibility);
+      consumed = true;
+      for (const event of dismissEvents) window.removeEventListener(event, dismiss, true);
       clearTimeout(expiry);
-      clearInterval(monitor);
       highlight?.remove();
       delete globalThis.ClickItPage;
     }
@@ -200,20 +115,10 @@
       shadow.append(style, area, marker, hint);
       (document.fullscreenElement || document.documentElement).append(highlight);
       expiry = setTimeout(cancel, 8000);
-      monitor = setInterval(() => {
-        if (geometry() !== original || location.href !== url || appearance !== regionAppearance()) invalidate();
-      }, 100);
+      for (const event of dismissEvents) window.addEventListener(event, dismiss, true);
       return { suggested: true, answer: 'Highlighted area' };
     }
     globalThis.ClickItPage = {
-      watch(point, watchedRegions) {
-        regions = watchedRegions;
-        if (changed.some(intersects)) invalidate();
-        changed = [];
-        check(point);
-        appearance = regionAppearance();
-        return true;
-      },
       click(point, rect) {
         if (highlight) throw new Error('The answer was already suggested. Press Answer again.');
         const control = check(point);
