@@ -1,8 +1,8 @@
 // Stripe's pinned 2024-06-20 contract is kept in worker.mjs. No browser-provided
 // amount, allowance, customer, subscription, or Stripe price is authoritative.
-export const PLANS = Object.freeze({
-  basic: Object.freeze({ id: 'basic', name: 'Basic', amount: 499, currency: 'usd', credits: 500, interval: 'month' }),
-  plus: Object.freeze({ id: 'plus', name: 'Plus', amount: 999, currency: 'usd', credits: 1200, interval: 'month' })
+const PLANS = Object.freeze({
+  basic: Object.freeze({ id: 'basic', amount: 499, credits: 500 }),
+  plus: Object.freeze({ id: 'plus', amount: 999, credits: 1200 })
 });
 const stmt = (db, sql, ...args) => db.prepare(sql).bind(...args);
 const objectId = value => typeof value === 'string' ? value : value?.id;
@@ -75,8 +75,8 @@ export function billingService({ env, stripe, now, fail }) {
     const sub = await current(owner);
     const account = await stmt(db, 'SELECT customer_id,reconcile_error FROM billing_accounts WHERE installation_id=?', owner).first();
     const period = sub ? await stmt(db, 'SELECT allowance FROM subscription_periods WHERE subscription_id=? AND period_start=?', sub.id, sub.period_start).first() : null;
-    return { ...row, ...held, plans: Object.values(PLANS), checkoutEnabled: env.CHECKOUT_ENABLED === 'true',
-      visionEnabled: env.VISION_ENABLED === 'true', supportUrl: env.SUPPORT_URL || '',
+    return { ...row, ...held, checkoutEnabled: env.CHECKOUT_ENABLED === 'true',
+      visionEnabled: env.VISION_ENABLED === 'true',
       billingManagementAvailable: Boolean(account?.customer_id && env.STRIPE_PORTAL_CONFIGURATION_ID),
       billingSyncError: Boolean(account?.reconcile_error),
       subscription: sub ? { planId: sub.plan_id, status: sub.status, allowance: period?.allowance || 0,
@@ -106,12 +106,12 @@ export function billingService({ env, stripe, now, fail }) {
     const latest = typeof sub.latest_invoice === 'object' ? sub.latest_invoice : sub.latest_invoice ? await stripe(`invoices/${sub.latest_invoice}`) : null;
     const paymentUrl = latest && !latest.paid && latest.status === 'open' ? latest.hosted_invoice_url || null : null;
     await stmt(db, `INSERT INTO subscriptions(id,installation_id,status,plan_id,period_start,period_end,cancel_at_period_end,
-      scheduled_plan,schedule_id,pending_upgrade,payment_url,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+      scheduled_plan,pending_upgrade,payment_url,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET status=excluded.status,plan_id=excluded.plan_id,period_start=excluded.period_start,
       period_end=excluded.period_end,cancel_at_period_end=excluded.cancel_at_period_end,scheduled_plan=excluded.scheduled_plan,
-      schedule_id=excluded.schedule_id,pending_upgrade=excluded.pending_upgrade,payment_url=excluded.payment_url,updated_at=excluded.updated_at`,
+      pending_upgrade=excluded.pending_upgrade,payment_url=excluded.payment_url,updated_at=excluded.updated_at`,
     sub.id, account.installation_id, sub.status, plan.id, sub.current_period_start * 1000, sub.current_period_end * 1000,
-    sub.cancel_at_period_end || sub.cancel_at === sub.current_period_end ? 1 : 0, scheduledPlan, objectId(sub.schedule) || null,
+    sub.cancel_at_period_end || sub.cancel_at === sub.current_period_end ? 1 : 0, scheduledPlan,
     sub.pending_update ? 1 : 0, paymentUrl, now).run();
     return sub;
   }
@@ -287,17 +287,14 @@ export function billingService({ env, stripe, now, fail }) {
       }
       await stmt(db, 'UPDATE billing_accounts SET checkout_id=?,checkout_plan=?,checkout_session=NULL WHERE installation_id=?', attempt, plan.id, owner).run();
       const session = await stripe('checkout/sessions', {
-        ui_mode: 'hosted_page', mode: 'subscription',
+        mode: 'subscription', customer: account.customer_id, client_reference_id: owner,
+        'metadata[clickit_checkout]': attempt, 'subscription_data[metadata][clickit_installation]': owner,
         'line_items[0][price]': prices[plan.id], 'line_items[0][quantity]': '1',
         success_url: `${publicUrl()}/purchase.html`, cancel_url: `${publicUrl()}/purchase.html?cancelled=1`,
-        billing_address_collection: 'auto', 'phone_number_collection[enabled]': 'false',
-        'automatic_tax[enabled]': 'false', allow_promotion_codes: 'false',
-        payment_method_collection: 'always', submit_type: 'auto',
-        integration_identifier: 'hosted_web_0003', origin_context: 'web'
+        'automatic_tax[enabled]': 'false'
       }, `subscription-checkout:${attempt}`);
       if (!/^cs_[A-Za-z0-9_]+$/.test(session.id || '') || new URL(session.url).origin !== 'https://checkout.stripe.com') fail(502, 'Unexpected checkout URL.');
-      await stmt(db, `UPDATE billing_accounts SET checkout_session=?,checkout_url=?,checkout_expires_at=? WHERE installation_id=?`,
-        session.id, session.url, session.expires_at * 1000, owner).run();
+      await stmt(db, 'UPDATE billing_accounts SET checkout_session=? WHERE installation_id=?', session.id, owner).run();
       return { url: session.url };
     });
   }

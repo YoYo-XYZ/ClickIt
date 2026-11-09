@@ -83,10 +83,10 @@ async function run(tabId, job, config) {
     if (result.confidence < config.minConfidence) throw new Error(`Skipped: answer confidence ${Math.round(result.confidence * 100)}% is below your ${Math.round(config.minConfidence * 100)}% threshold.`);
     let clickTarget = result.index, targetRegion;
     if (vision) {
-      clickTarget = V.point(q, result.boxes.target, snapshot.result);
       targetRegion = V.region(q, result.boxes.target, snapshot.result);
-      const regions = [result.boxes.question, result.boxes.choices, result.boxes.target];
-      await pageCall('watch', clickTarget, regions.map(box => V.region(q, box, snapshot.result)));
+      clickTarget = { x: targetRegion.x + targetRegion.width / 2, y: targetRegion.y + targetRegion.height / 2 };
+      await pageCall('watch', clickTarget, [V.region(q, result.boxes.question, snapshot.result),
+        V.region(q, result.boxes.choices, snapshot.result), targetRegion]);
       job.controller.signal.throwIfAborted();
     }
     const action = await pageCall('click', clickTarget, targetRegion);

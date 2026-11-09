@@ -341,7 +341,7 @@ test('popup saves lean settings, shows only the latest answer, and keeps it on r
     try {
       await page.bringToFront();
       await reopened.waitForFunction(() => document.getElementById('answer').textContent === '6');
-      assert.equal(await reopened.locator('.latest-answer strong').count(), 1);
+      assert.equal(await reopened.locator('#answerNow strong').count(), 1);
       await reopened.screenshot({ path: path.resolve(__dirname, '../test-results/popup.png'), fullPage: true });
     } finally { await reopened.close(); }
   });

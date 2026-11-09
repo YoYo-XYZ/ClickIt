@@ -35,7 +35,7 @@
       q.options.some(o => typeof o !== 'string' || !normalize(o) || o.length > 4000)) throw new Error('Invalid quiz question or options.');
     return { question: normalize(q.question), options: q.options.map(normalize) };
   }
-  function requestBody(q, provider = 'typesafe', prompt = defaults.textPrompt) {
+  function requestBody(q, provider, prompt = defaults.textPrompt) {
     return {
       model: providers[provider].model, state: { question: q.question },
       questions: { answer: {
@@ -51,7 +51,7 @@
       : body?.model === 'jev-1.14.0';
     if (!matchesModel) throw new Error('The API did not return Jev 1.14.');
   }
-  function parseAnswer(body, count, provider = 'typesafe') {
+  function parseAnswer(body, count, provider) {
     validateModel(body, provider);
     const a = body?.answers?.answer;
     if (!a || a.type !== 'choice' || !/^a\d+$/.test(a.choice)) throw new Error('The API returned an invalid choice.');

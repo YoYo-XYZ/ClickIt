@@ -217,8 +217,8 @@ $('showAccessKey').addEventListener('click', () => {
   $('hostedAccessKey').type = show ? 'text' : 'password';
   $('showAccessKey').textContent = show ? 'Hide key' : 'Show key';
 });
-if (ClickItConfig.publicUrl) {
-  $('privacyLink').href = `${ClickItConfig.publicUrl}/privacy.html`;
+if (ClickItConfig.apiUrl) {
+  $('privacyLink').href = `${ClickItConfig.apiUrl}/privacy.html`;
   $('privacyLink').hidden = false;
 }
 $('supportLink').href = ClickItConfig.supportUrl;

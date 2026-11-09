@@ -1,12 +1,11 @@
 (() => {
-  let credential = '', installationId = '', cached = null, lastRefresh = 0, refreshing, registering;
+  let credential = '', cached = null, lastRefresh = 0, refreshing, registering;
   let pending = {};
   let billingOperation = null;
   const live = new Set();
   const config = ClickItConfig;
-  const ready = chrome.storage.local.get(['hostedCredential', 'hostedInstallationId', 'hostedBalance', 'hostedPending', 'hostedBillingOperation']).then(stored => {
+  const ready = chrome.storage.local.get(['hostedCredential', 'hostedBalance', 'hostedPending', 'hostedBillingOperation']).then(stored => {
     credential = stored.hostedCredential || '';
-    installationId = stored.hostedInstallationId || '';
     cached = stored.hostedBalance || null;
     pending = stored.hostedPending || {};
     billingOperation = stored.hostedBillingOperation || null;
@@ -64,7 +63,7 @@
     let error = '';
     try { await refresh(force); } catch (e) { error = e.message; }
     await ready;
-    return { configured: configured(), registered: Boolean(credential), installationId, credential,
+    return { configured: configured(), registered: Boolean(credential), credential,
       balance: cached, pending: Object.keys(pending).length, billingOperationPending: Boolean(billingOperation), error };
   }
   async function register(consent) {
@@ -72,12 +71,10 @@
     if (credential) return state(true);
     if (registering) return registering;
     registering = (async () => {
-      const result = await api('installations', { adultConsent: consent.adultConsent === true,
+      const { credential: accessKey, installationId: _installationId, ...value } = await api('installations', { adultConsent: consent.adultConsent === true,
         dataConsent: consent.dataConsent === true, source: 'chrome-web-store' }, { anonymous: true });
-      credential = result.credential;
-      installationId = result.installationId;
-      await chrome.storage.local.set({ hostedCredential: credential, hostedInstallationId: installationId });
-      const { credential: _secret, installationId: _id, ...value } = result;
+      credential = accessKey;
+      await chrome.storage.local.set({ hostedCredential: credential });
       await rememberBalance(value);
       return state();
     })();
@@ -150,12 +147,11 @@
     if (!/^ci_[a-f0-9]{64}$/.test(value)) throw new Error('Paste your complete installation access key.');
     const valueBalance = await api('balance', undefined, { credential: value });
     credential = value;
-    installationId = '';
-    await chrome.storage.local.set({ hostedCredential: value, hostedInstallationId: '' });
+    await chrome.storage.local.set({ hostedCredential: value });
     await chrome.storage.local.remove('hostedBillingOperation');
     billingOperation = null;
     await rememberBalance(valueBalance);
     return { restored: true };
   }
-  globalThis.ClickItHosted = { state, register, answer, complete, checkout, portal, preview, change, retryChange, restore, refresh };
+  globalThis.ClickItHosted = { state, register, answer, complete, checkout, portal, preview, change, retryChange, restore };
 })();

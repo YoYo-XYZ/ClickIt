@@ -47,9 +47,8 @@ form input, form select { display: block; width: 100%; margin-top: 7px; padding:
 .prompt-heading label { margin: 0; }
 #resetPrompt { padding: 3px 0 3px 10px; background: transparent; color: #9becce; font-size: 12px; }
 textarea { width: 100%; padding: 10px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; line-height: 1.5; resize: vertical; }
-textarea[hidden] { display: none; }
 #saveSettings { width: 100%; padding: 11px; border-radius: 9px; background: #9becce; color: #15372e; font-weight: 650; }
-@media (prefers-reduced-motion: reduce) { #answerNow, .mode-option span { transition: none; } }
+@media (prefers-reduced-motion: reduce) { #answerNow { transition: none; } }
 [hidden] { display: none !important; }
 #hostedPanel { padding: 14px; border: 1px solid #35414f; border-radius: 12px; background: #1b242f; }
 .credit-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

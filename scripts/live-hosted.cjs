@@ -25,7 +25,7 @@ const crypto = require('node:crypto');
   if (fs.existsSync(filename)) access = JSON.parse(fs.readFileSync(filename,'utf8'));
   else {
     const installation = await api('installations',{adultConsent:true,dataConsent:true,source:'direct'});
-    access = {credential:installation.credential,installationId:installation.installationId};
+    access = {credential:installation.credential};
     fs.writeFileSync(filename,JSON.stringify(access),{flag:'wx',mode:0o600});
   }
   const before = await api('balance',undefined,access.credential);

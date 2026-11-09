@@ -15,7 +15,7 @@ before(async () => {
   output = fs.mkdtempSync(path.join(os.tmpdir(), 'clickit-hosted-tests-'));
   const extension = path.join(output, 'extension');
   fs.cpSync(path.resolve(__dirname, '../extension'), extension, { recursive: true });
-  fs.writeFileSync(path.join(extension, 'config.js'), 'globalThis.ClickItConfig=Object.freeze({apiUrl:"https://clickit.example",publicUrl:"https://clickit.example",supportUrl:"mailto:thammatorn.j@gmail.com"});');
+  fs.writeFileSync(path.join(extension, 'config.js'), 'globalThis.ClickItConfig=Object.freeze({apiUrl:"https://clickit.example",supportUrl:"mailto:thammatorn.j@gmail.com"});');
   const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
   manifest.host_permissions.push('https://clickit.example/*');
   fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify(manifest));

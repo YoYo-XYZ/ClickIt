@@ -37,7 +37,6 @@
     "VISION_ENABLED": "false",
     "CHECKOUT_ENABLED": "false",
     "STRIPE_LIVE_MODE": "false",
-    "STRIPE_AUTOMATIC_TAX": "false",
     "STRIPE_PRICE_ID": "price_1UZAnpDC5PkZdLhQsxqCeEyU",
     "STRIPE_BASIC_PRICE_ID": "price_1UZPAnDC5PkZdLhQCAwMbIm7",
     "STRIPE_PLUS_PRICE_ID": "price_1UZPAnDC5PkZdLhQy2Zm2Ydw",

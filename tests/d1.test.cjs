@@ -10,7 +10,22 @@ test('Cloudflare D1 executes the migration and serializes competing reservations
   const db = await mf.getD1Database('DB');
   // D1 exec treats each line as a SQL program. Preserve trigger bodies in one program.
   const migrations = path.resolve(__dirname, '../server/migrations');
-  for (const name of fs.readdirSync(migrations).filter(n => n.endsWith('.sql')).sort()) await db.exec(fs.readFileSync(path.join(migrations, name), 'utf8').replace(/\r?\n/g, ' '));
+  for (const name of fs.readdirSync(migrations).filter(n => n.endsWith('.sql')).sort()) {
+    if (name === '0004_remove_unused_billing_state.sql') await db.batch([
+      db.prepare("INSERT INTO installations VALUES('existing','hash-existing','ip','demo',0,0)"),
+      db.prepare("INSERT INTO credit_lots(id,installation_id,granted,created_at) VALUES('existing','existing',10,0)"),
+      db.prepare("INSERT INTO billing_accounts(installation_id,customer_id,checkout_session,checkout_url,checkout_expires_at) VALUES('existing','cus_existing','cs_existing','https://checkout.stripe.com/old',100)"),
+      db.prepare("INSERT INTO subscriptions(id,installation_id,status,plan_id,period_start,period_end,schedule_id,scheduled_plan,updated_at) VALUES('sub_existing','existing','active','plus',0,100,'sched_existing','basic',0)")
+    ]);
+    await db.exec(fs.readFileSync(path.join(migrations, name), 'utf8').replace(/\r?\n/g, ' '));
+  }
+  assert.equal((await db.prepare("SELECT granted FROM credit_lots WHERE installation_id='existing'").first()).granted, 10);
+  assert.equal((await db.prepare("SELECT customer_id FROM billing_accounts WHERE installation_id='existing'").first()).customer_id, 'cus_existing');
+  assert.equal((await db.prepare("SELECT scheduled_plan FROM subscriptions WHERE installation_id='existing'").first()).scheduled_plan, 'basic');
+  for (const [table, removed] of [['billing_accounts', ['checkout_url', 'checkout_expires_at']], ['subscriptions', ['schedule_id']]]) {
+    const { results } = await db.prepare(`PRAGMA table_info(${table})`).all();
+    assert.ok(removed.every(name => !results.some(column => column.name === name)));
+  }
   await db.batch([
     db.prepare("INSERT INTO installations VALUES('a','hash-a','ip','demo',0,0)"),
     db.prepare("INSERT INTO installations VALUES('b','hash-b','ip','demo',0,0)"),

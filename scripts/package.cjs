@@ -23,7 +23,7 @@ for (const name of fs.readdirSync(path.join(root, 'extension'))) {
   const source = path.join(root, 'extension', name);
   fs.cpSync(source, path.join(output, name), { recursive: true });
 }
-fs.writeFileSync(path.join(output, 'config.js'), `globalThis.ClickItConfig = Object.freeze(${JSON.stringify({ apiUrl, publicUrl: apiUrl, supportUrl })});\n`);
+fs.writeFileSync(path.join(output, 'config.js'), `globalThis.ClickItConfig = Object.freeze(${JSON.stringify({ apiUrl, supportUrl })});\n`);
 const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'));
 if (apiUrl) manifest.host_permissions.push(`${apiUrl}/*`);
 if (apiUrl) manifest.homepage_url = apiUrl;

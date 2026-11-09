@@ -59,18 +59,12 @@ async function cleanup(db, now) {
 function billing(env, fetchImpl, now) {
   return billingService({ env, now, fail, stripe: (path, form, key) => stripe(fetchImpl, env, path, form, key) });
 }
-async function balance(db, id, env, now) {
-  return billing(env, null, now).snapshot(id);
-}
 async function identity(request, db) {
   const token = /^Bearer (ci_[a-f0-9]{64})$/.exec(request.headers.get('Authorization') || '')?.[1];
   if (!token) fail(401, 'Start your free trial or restore your installation credential.');
   const row = await stmt(db, 'SELECT id FROM installations WHERE credential_hash=?', await hash(token)).first();
   if (!row) fail(401, 'Installation credential is no longer valid. Contact support to recover a purchase.');
   return row.id;
-}
-async function event(db, id, kind, now) {
-  await stmt(db, 'INSERT INTO events(installation_id,kind,created_at) VALUES(?,?,?)', id, kind, now).run();
 }
 function requestData(data, env) {
   if (!data || typeof data !== 'object' || !/^[a-f0-9-]{36}$/.test(data.requestId || '')) fail(400, 'A valid request ID is required.');
@@ -172,8 +166,7 @@ export function createWorker({ fetchImpl = (...args) => fetch(...args), now = ()
       try {
         if (url.pathname === '/launch.json' && request.method === 'GET') return json({
           storeUrl: env.STORE_URL || '', supportUrl: env.SUPPORT_URL || '',
-          trialEnabled: env.TRIAL_ENABLED === 'true', checkoutEnabled: env.CHECKOUT_ENABLED === 'true',
-          visionEnabled: env.VISION_ENABLED === 'true'
+          trialEnabled: env.TRIAL_ENABLED === 'true'
         });
         if (!url.pathname.startsWith('/v1/')) return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found', { status: 404 });
         if (url.pathname === '/v1/stripe/webhook' && request.method === 'POST') return await webhook(request, env, fetchImpl, now());
@@ -218,7 +211,7 @@ async function route(request, env, url, fetchImpl, now) {
         SELECT ?,id,10,? FROM installations WHERE id=?`, `trial:${id}`, now, id)
     ]);
     if (!result[0].meta.changes) fail(429, 'The trial limit has been reached. Try later or contact support.');
-    return json({ credential, installationId: id, ...await balance(db, id, env, now) }, 201);
+    return json({ credential, installationId: id, ...await billing(env, fetchImpl, now).snapshot(id) }, 201);
   }
   const id = await identity(request, db);
   await expire(db, now);
@@ -227,7 +220,7 @@ async function route(request, env, url, fetchImpl, now) {
       stmt(db, `INSERT INTO events(installation_id,kind,created_at) SELECT id,'session_started',? FROM installations WHERE id=? AND last_seen_at<?`, now, id, now - 1800000),
       stmt(db, 'UPDATE installations SET last_seen_at=? WHERE id=?', now, id)
     ]);
-    return json(await balance(db, id, env, now));
+    return json(await billing(env, fetchImpl, now).snapshot(id));
   }
   if (request.method === 'POST' && ['/v1/checkout', '/v1/subscription/preview', '/v1/subscription/change', '/v1/billing-portal'].includes(url.pathname)) {
     const service = billing(env, fetchImpl, now);
@@ -299,7 +292,7 @@ async function route(request, env, url, fetchImpl, now) {
     if (data.delivered && row.status === 'reserved') fail(409, 'No validated answer is ready.');
     await stmt(db, `UPDATE requests SET status=?,completed_at=? WHERE id=? AND installation_id=? AND status IN ('reserved','ready')`,
       data.delivered ? 'settled' : 'released', now, data.requestId, id).run();
-    return json(await balance(db, id, env, now));
+    return json(await billing(env, fetchImpl, now).snapshot(id));
   }
   fail(404, 'Endpoint not found.');
 }

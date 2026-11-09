@@ -31,7 +31,7 @@ Hosted mode uses credits. Advanced API-key mode is billed by your provider. Visi
 
 ## Deploy the monetized release
 
-[Deployment, payments, validation, and operating guide](docs/LAUNCH.md) · [Store listing and launch materials](docs/STORE.md)
+[Deployment, payments, validation, and operating guide](docs/SUBSCRIPTIONS.md) · [Store listing and launch materials](docs/STORE.md)
 
 ```powershell
 npm ci
