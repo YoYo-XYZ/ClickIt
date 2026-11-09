@@ -95,7 +95,7 @@ async function refreshShortcut() {
     const commands = await chrome.commands.getAll();
     const shortcut = commands.find(command => command.name === 'answer-question')?.shortcut;
     $('hotkeyValue').textContent = shortcut || 'Not assigned';
-    $('answerShortcut').textContent = shortcut ? `${shortcut.replace(/\bCtrl\b/g, 'Cltr').split('+').join(' + ')} to Clickit` : 'Set an answer hotkey in Settings';
+    $('answerShortcut').textContent = shortcut ? `${shortcut.replace(/\bCtrl\b/g, 'Cltr')} to ClickIt` : 'Set an answer hotkey in Settings';
     $('hotkeyError').textContent = '';
   } catch {
     $('hotkeyValue').textContent = 'Unavailable';

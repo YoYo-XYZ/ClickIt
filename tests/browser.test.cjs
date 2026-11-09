@@ -402,7 +402,7 @@ test('hotkey settings show actual assignments in both billing modes and open Chr
       await controls.locator('#changeShortcut').click();
       assert.equal(await controls.evaluate(() => shortcutPage), 'chrome://extensions/shortcuts');
       await controls.locator('#settingsToggle').click();
-      assert.equal(await controls.locator('#answerShortcut').textContent(), shortcut ? 'Alt + Shift + Y to Clickit' : 'Set an answer hotkey in Settings');
+      assert.equal(await controls.locator('#answerShortcut').textContent(), shortcut ? 'Alt+Shift+Y to ClickIt' : 'Set an answer hotkey in Settings');
     }
   } finally { await controls.close(); }
 });
