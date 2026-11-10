@@ -31,7 +31,7 @@
     "PUBLIC_URL": "https://clickit.thammatorn-clickit.workers.dev",
     "SUPPORT_URL": "mailto:thammatorn.j@gmail.com",
     "STORE_URL": "",
-    "EXTENSION_ORIGINS": "chrome-extension://dkoabbnhhchhppmdjjnchaodddkekhjc",
+    "EXTENSION_ORIGINS": "chrome-extension://dkoabbnhhchhppmdjjnchaodddkekhjc,chrome-extension://dfpglkafpdbnfecohhgmhkpceinhhpjl",
     "TRIAL_ENABLED": "true",
     "INFERENCE_ENABLED": "true",
     "VISION_ENABLED": "false",

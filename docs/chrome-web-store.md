@@ -1,5 +1,7 @@
 # ClickIt Chrome Web Store release
 
+Assigned extension ID: `dfpglkafpdbnfecohhgmhkpceinhhpjl`. The item is a draft, not a published listing. Its public key is stored in `chrome-web-store-public-key.pem` for release packaging and testing with the same ID.
+
 ## Listing copy
 
 Name: ClickIt
@@ -69,7 +71,7 @@ The user confirmed prior hands-on quiz testing. This release does not claim the 
 - Run the separate Stripe test-clock suite with a private TEST key. A LIVE key must never substitute for it.
 - Provision the production `/v1/stripe/webhook` endpoint for the billing events, pin its API version to `2024-06-20`, and install its signing secret as `STRIPE_WEBHOOK_SECRET` in Worker secret storage. Verify delivery of an actual Stripe event, reject invalid signatures and test-mode events, and confirm that the owner's paid invoice grants 500 monthly credits exactly once before public paid launch.
 - Keep combined live validation spending below US$10, including the owner-completed Basic purchase. Cancel that test subscription's renewal.
-- Build with `npm run package:extension -- --api-url https://clickit.thammatorn-clickit.workers.dev`. Add `--public-key-file <public-key-file>` after the dashboard assigns the store item and exposes its public key. Check that the unpacked extension ID matches the assigned ID.
+- Build with `npm run package:extension -- --api-url https://clickit.thammatorn-clickit.workers.dev --public-key-file docs/chrome-web-store-public-key.pem`. Check that the unpacked extension ID matches the assigned ID.
 - Run `node scripts/store-screenshots.cjs` after browser tests generate current interface captures. Upload the three 1280x800 PNGs and the existing 128x128 icon.
 - Add the assigned store origin to the backend allowlist before reviewer testing. Keep the existing development origin while the operator installation needs it.
 - Keep checkout and hosted Vision disabled until their respective checks pass. Billing management must remain available to existing subscribers when new checkout is disabled.
