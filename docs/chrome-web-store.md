@@ -89,6 +89,8 @@ Before the live cutover on November 10, 2026, production had no paid legacy orde
 
 ## Version 1.0.0 release notes
 
+After submission on November 10, 2026, the production Worker OPENROUTER_API_KEY secret was rotated to the owner's new dedicated OpenRouter workspace key. OpenRouter authenticated the key, Cloudflare confirmed the secret update, and production Text and Vision both passed the stable-store-ID extension smoke check. Each selected 4 once, submitted nothing, consumed one credit, and left no reserved credit. The submitted extension package requires no change for this server-side credential rotation.
+
 ClickIt supports hosted Text and Vision suggestions, optional direct provider access, monthly subscriptions, saved prompts, and a browser-managed answer hotkey. Requests remain user-triggered and never submit quizzes.
 
 This release fixes Windows lock-key events canceling a Vision hotkey request, adds explicit API-key data-sharing consent, requires local consent after hosted access restoration, and links subscription Checkout to the privacy and refund terms. Typing and changes to the question, target, tab, or viewport still cancel stale decisions.
