@@ -8,7 +8,7 @@ async function background(overrides = {}) {
   const listeners = {}, badges = new Map(), titles = new Map();
   const tab = { id: 7, windowId: 1, url: 'https://quiz.example/question' };
   const event = name => ({ addListener: listener => { listeners[name] = listener; } });
-  const hosted = { configured: true, registered: true, balance: { visionEnabled: true } };
+  const hosted = { configured: true, registered: true, consented: true, balance: { visionEnabled: true } };
   let release;
   const pending = new Promise(resolve => { release = resolve; });
   const calls = [], pageCalls = [], completions = [];
@@ -71,11 +71,12 @@ test('command and popup share the hosted job lock, including asynchronous setup'
 });
 
 test('command setup errors report on the target tab without opening the popup', async () => {
-  for (const kind of ['apiKey', 'configured', 'registered', 'vision', 'restricted']) {
+  for (const kind of ['apiKey', 'configured', 'registered', 'consented', 'vision', 'restricted']) {
     const app = await background();
     if (kind === 'apiKey') app.inspect("settings = { ...settings, billingMode: 'byok', apiKey: '' }");
     if (kind === 'configured') app.hosted.configured = false;
     if (kind === 'registered') app.hosted.registered = false;
+    if (kind === 'consented') app.hosted.consented = false;
     if (kind === 'vision') {
       app.inspect("settings = { ...settings, mode: 'vision' }");
       app.hosted.balance.visionEnabled = false;
@@ -84,7 +85,7 @@ test('command setup errors report on the target tab without opening the popup', 
     app.listeners.command('answer-question', app.tab);
     await app.flush();
     assert.equal(app.badges.get(7), 'ERR', kind);
-    assert.match(app.titles.get(7), /API key|free trial|Vision|regular webpage/);
+    assert.match(app.titles.get(7), /API key|free trial|data sharing|Vision|regular webpage/);
     assert.equal(app.calls.length, 0);
     assert.equal(app.inspect('jobs.size'), 0);
   }

@@ -1,11 +1,13 @@
 (() => {
   let credential = '', cached = null, lastRefresh = 0, refreshing, registering;
+  let consented = false;
   let pending = {};
   let billingOperation = null;
   const live = new Set();
   const config = ClickItConfig;
-  const ready = chrome.storage.local.get(['hostedCredential', 'hostedBalance', 'hostedPending', 'hostedBillingOperation']).then(stored => {
+  const ready = chrome.storage.local.get(['hostedCredential', 'hostedConsent', 'hostedBalance', 'hostedPending', 'hostedBillingOperation']).then(stored => {
     credential = stored.hostedCredential || '';
+    consented = stored.hostedConsent === true;
     cached = stored.hostedBalance || null;
     pending = stored.hostedPending || {};
     billingOperation = stored.hostedBillingOperation || null;
@@ -63,18 +65,24 @@
     let error = '';
     try { await refresh(force); } catch (e) { error = e.message; }
     await ready;
-    return { configured, registered: Boolean(credential), credential,
+    return { configured, registered: Boolean(credential), consented, credential,
       balance: cached, pending: Object.keys(pending).length, billingOperationPending: Boolean(billingOperation), error };
   }
   async function register(consent) {
     await ready;
-    if (credential) return state(true);
+    if (consent.adultConsent !== true || consent.dataConsent !== true) throw new Error('Confirm age and data processing before starting.');
+    if (credential) {
+      await chrome.storage.local.set({ hostedConsent: true });
+      consented = true;
+      return state(true);
+    }
     if (registering) return registering;
     registering = (async () => {
       const { credential: accessKey, installationId: _installationId, ...value } = await api('installations', { adultConsent: consent.adultConsent === true,
         dataConsent: consent.dataConsent === true, source: 'chrome-web-store' }, { anonymous: true });
       credential = accessKey;
-      await chrome.storage.local.set({ hostedCredential: credential });
+      await chrome.storage.local.set({ hostedCredential: credential, hostedConsent: true });
+      consented = true;
       await rememberBalance(value);
       return state();
     })();
@@ -82,6 +90,7 @@
   }
   async function answer(q, mode, job) {
     await ready;
+    if (!consented) throw new Error('Review and accept the data sharing disclosure in the popup before answering.');
     await reconcile();
     if (!credential) throw new Error('Start your free trial first.');
     if (Object.keys(pending).length) throw new Error('A previous credit is still syncing. Refresh your balance before answering again.');

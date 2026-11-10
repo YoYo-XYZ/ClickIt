@@ -55,7 +55,8 @@ function showCredits() {
   const sub = value?.subscription;
   const live = sub && !['canceled', 'incomplete_expired'].includes(sub.status);
   $('retryBilling').hidden = !hosted.billingOperationPending;
-  $('trialConsent').hidden = hosted.registered;
+  $('trialConsent').hidden = hosted.registered && hosted.consented;
+  $('startTrial').textContent = hosted.registered ? 'Accept and continue' : 'Start free trial';
   $('refreshBalance').hidden = !hosted.registered;
   $('subscribeOptions').hidden = !hosted.registered || live;
   $('subscriptionActions').hidden = !hosted.registered || (!live && !value?.billingManagementAvailable);
@@ -195,7 +196,10 @@ $('answerNow').addEventListener('click', async () => {
       await refresh();
     } catch (error) {
       if (error.message.includes('API key')) { showSettings(true); $('apiKey').focus(); }
-      if (error.message.includes('data sharing')) { showSettings(true); $('byokConsent').focus(); }
+      if (error.message.includes('data sharing')) {
+        if (saved.billingMode === 'byok') { showSettings(true); $('byokConsent').focus(); }
+        else { showSettings(false); $('dataConsent').focus(); }
+      }
       throw error;
     }
   });

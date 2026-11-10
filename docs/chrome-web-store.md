@@ -52,7 +52,7 @@ Only certify Limited Use statements after confirming the deployed extension, web
 ## Reviewer instructions
 
 1. Install ClickIt and open https://clickit.thammatorn-clickit.workers.dev/demo.html.
-2. Open the popup, read the age and data disclosures, and start the free trial. If supplied, restore the separate reviewer installation key in Settings. The key belongs only in the dashboard's private reviewer instructions, never this file or the public listing.
+2. Open the popup, read the age and data disclosures, and start the free trial. Alternatively, restore the separate reviewer installation key in Settings, then accept the disclosures in the popup. This does not create another trial. The key belongs only in the dashboard's private reviewer instructions, never this file or the public listing.
 3. Select Text and press Answer. The sample answer is 4. Confirm one answer is selected and the quiz remains unsubmitted.
 4. Repeat in Vision with the whole question and choices visible. Each Answer action creates at most one suggestion.
 5. Configure the answer hotkey through Settings and invoke it with the popup closed. Check toolbar status. Chrome can leave a conflicting shortcut unassigned.
@@ -80,4 +80,4 @@ The user confirmed prior hands-on quiz testing. This release does not claim the 
 
 ClickIt supports hosted Text and Vision suggestions, optional direct provider access, monthly subscriptions, saved prompts, and a browser-managed answer hotkey. Requests remain user-triggered and never submit quizzes.
 
-This release fixes Windows lock-key events canceling a Vision hotkey request, adds explicit API-key data-sharing consent, and links subscription Checkout to the privacy and refund terms. Typing and changes to the question, target, tab, or viewport still cancel stale decisions.
+This release fixes Windows lock-key events canceling a Vision hotkey request, adds explicit API-key data-sharing consent, requires local consent after hosted access restoration, and links subscription Checkout to the privacy and refund terms. Typing and changes to the question, target, tab, or viewport still cancel stale decisions.

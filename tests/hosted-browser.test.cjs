@@ -144,7 +144,11 @@ test('a hosted suggestion clicks once then settles, while balance refresh never 
     assert.deepEqual(await worker.evaluate(async () => (await chrome.storage.local.get('hostedPending')).hostedPending), {});
     await controls.evaluate(() => refresh());
     assert.equal(await controls.locator('#creditBalance').textContent(), '9 credits left');
+    // Store artwork shows the intended launch configuration, not the disabled pilot gate.
+    await worker.evaluate(async () => { hostedMock.checkoutEnabled = true; await ClickItHosted.state(true); });
+    await controls.evaluate(() => refresh());
     await controls.locator('body').screenshot({ path: path.resolve(__dirname, '../test-results/hosted-answer.png') });
+    await worker.evaluate(async () => { hostedMock.checkoutEnabled = false; await ClickItHosted.state(true); });
   });
 });
 

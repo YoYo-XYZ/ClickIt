@@ -63,7 +63,7 @@ textarea { width: 100%; padding: 10px; border: 1px solid #35414f; border-radius:
 #hostedPanel p, #accessRecovery p { font-size: 12px; line-height: 1.5; color: #b7c3d2; margin: 8px 0; }
 #creditError:empty { display: none; }
 .consent { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; margin-top: 10px; }
-.consent input { margin-top: 3px; flex: 0 0 auto; }
+.consent input { width: auto; margin-top: 3px; padding: 0; flex: 0 0 auto; }
 #hostedPanel button, #accessRecovery button { padding: 8px 10px; border-radius: 8px; background: #283d38; color: #bcf3dc; }
 #startTrial, #buyCredits { width: 100%; margin-top: 12px; }
 #refreshBalance { font-size: 12px; }

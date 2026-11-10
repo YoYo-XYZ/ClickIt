@@ -125,6 +125,7 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     assert.equal(await worker.evaluate(() => captures.length), 0);
     await controls.locator('#answerNow').click();
     await controls.locator('#byokConsent').waitFor({ state: 'visible' });
+    assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
     await controls.locator('#byokConsent').check();
     await controls.locator('#saveSettings').click();
