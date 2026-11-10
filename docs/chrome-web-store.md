@@ -67,6 +67,10 @@ Do not include provider keys, live customer credentials, payment details, or pro
 
 The user confirmed prior hands-on quiz testing. This release does not claim the 100-session/five-tester benchmark passed.
 
+On November 10, 2026, the isolated Stripe test-clock suite passed with a separately supplied test-mode key and no external setup blockers. It covered Checkout creation and abandonment, exactly-once invoice credit grants, declined and authentication-required upgrades, proration, scheduled downgrade and renewal, failed renewal and recovery, partial refunds, portal access, and cancellation. The test-clock customer was deleted after the run. Interactive Checkout/3DS and deployed webhook delivery are separate checks; this result does not establish a successful live purchase.
+
+The store draft has the icon and three screenshots uploaded, with public visibility, all regions, and in-app purchases selected. The privacy form still needs a successful save, and the publisher contact email must be supplied and verified. The item has not been submitted.
+
 - Run `npm test`, `npm run test:hotkey:windows`, and `npm run check:worker` after final changes.
 - Run the separate Stripe test-clock suite with a private TEST key. A LIVE key must never substitute for it.
 - Provision the production `/v1/stripe/webhook` endpoint for the billing events, pin its API version to `2024-06-20`, and install its signing secret as `STRIPE_WEBHOOK_SECRET` in Worker secret storage. Verify delivery of an actual Stripe event, reject invalid signatures and test-mode events, and confirm that the owner's paid invoice grants 500 monthly credits exactly once before public paid launch.
