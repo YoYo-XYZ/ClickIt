@@ -11,7 +11,7 @@ async function main() {
   assert.equal(new URL(base).protocol, 'https:');
   assert.equal(new URL(base).origin, base);
   const credential = fs.readFileSync(credentialFile, 'utf8').trim();
-  assert.match(credential, /^ci_[a-f0-9]{64}$/);
+  if (!/^ci_[a-f0-9]{64}$/.test(credential)) throw new Error('The installation access key has an invalid format.');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clickit-hosted-'));
   let context;
   try {
