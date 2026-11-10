@@ -90,6 +90,20 @@ test('command setup errors report on the target tab without opening the popup', 
   }
 });
 
+test('hotkeys reject missing or non-boolean API-key consent before accessing the page or provider', async () => {
+  for (const byokConsent of [undefined, false, 'true']) {
+    const app = await background();
+    app.inspect(`settings = ClickIt.validateSettings({ billingMode: 'byok', apiKey: 'fake-key', byokConsent: ${JSON.stringify(byokConsent)} })`);
+    app.listeners.command('answer-question', app.tab);
+    await app.flush();
+    assert.match(app.titles.get(7), /data sharing disclosure/);
+    assert.equal(app.badges.get(7), 'ERR');
+    assert.equal(app.calls.length, 0);
+    assert.equal(app.pageCalls.length, 0);
+    assert.equal(app.inspect('jobs.size'), 0);
+  }
+});
+
 test('command uses its supplied tab and falls back only when absent; unrelated commands do nothing', async () => {
   const app = await background();
   app.listeners.command('unrelated', app.tab);

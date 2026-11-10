@@ -65,7 +65,9 @@
     const candidates = new Map([...document.querySelectorAll(selector)].map(node => [node, describe(node)]));
     let invalid = document.visibilityState !== 'visible';
     let regions, appearance, highlight, expiry, monitor, changed = [];
-    const invalidate = () => {
+    const invalidate = event => {
+      // Windows can toggle Num Lock while dispatching a shortcut. Lock keys do not edit the page.
+      if (event?.type === 'keydown' && ['NumLock', 'CapsLock', 'ScrollLock'].includes(event.key)) return;
       invalid = true;
       if (highlight) cancel();
     };

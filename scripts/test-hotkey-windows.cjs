@@ -17,7 +17,7 @@ async function main() {
     const extensionId = worker.url().split('/')[2];
     await worker.evaluate(async () => {
       await ready;
-      settings = ClickIt.validateSettings({ billingMode: 'byok', provider: 'typesafe', apiKey: 'fake-hotkey-test-key' });
+      settings = ClickIt.validateSettings({ billingMode: 'byok', provider: 'typesafe', apiKey: 'fake-hotkey-test-key', byokConsent: true });
       globalThis.hotkeyCalls = 0;
       globalThis.hotkeyBody = { model: 'jev-1.14.0', answers: { answer: { type: 'choice', choice: 'a1', confidence: 1 } } };
       globalThis.fetch = async (_url, init) => {
@@ -73,7 +73,13 @@ async function main() {
     });
     await worker.evaluate(body => { settings = { ...settings, mode: 'vision' }; hotkeyBody = body; }, body);
     await press();
-    await quiz.waitForFunction(() => clicks.length === 1);
+    const deadline = Date.now() + 10000;
+    while (!await worker.evaluate(() => hotkeyCalls === 2 && jobs.size === 0)) {
+      assert.ok(Date.now() < deadline, JSON.stringify(await worker.evaluate(() => [...statuses.values()])));
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    const status = await worker.evaluate(id => statuses.get(id), id);
+    assert.equal(status?.answer, '4', JSON.stringify(status));
     assert.deepEqual(await quiz.evaluate(() => [clicks, submissions]), [['4'], 0]);
     assert.equal(await worker.evaluate(() => hotkeyCalls), 2);
 
@@ -82,6 +88,7 @@ async function main() {
     await controls.locator('#settingsToggle').click();
     await controls.waitForFunction(() => document.getElementById('hotkeyValue').textContent === 'Ctrl+Shift+Y');
     await editor.bringToFront();
+    await command.getByRole('button', { name: 'Edit shortcut Answer the current question for ClickIt' }).click();
     await command.locator('#clear').click();
     await controls.locator('#settingsToggle').click();
     await controls.locator('#settingsToggle').click();

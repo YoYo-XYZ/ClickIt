@@ -13,7 +13,7 @@
     <p id="creditNote">10 free suggestions. Then choose a monthly subscription. No card required to try.</p>
     <div id="trialConsent">
       <label class="consent"><input id="adultConsent" type="checkbox">I am 18 or older and use ClickIt for casual quizzes.</label>
-      <label class="consent"><input id="dataConsent" type="checkbox">I agree to send this question, or the visible-tab screenshot in Vision, through ClickIt and OpenRouter to the Jev model provider to suggest an answer.</label>
+      <label class="consent"><input id="dataConsent" type="checkbox">I agree to send the question and choices in Text, or the whole visible-tab screenshot in Vision, through ClickIt and OpenRouter to TypeSafe's Jev model to suggest an answer. Screenshots may include personal information.</label>
       <button id="startTrial" type="button">Start free trial</button>
     </div>
     <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan</label><select id="subscriptionPlan"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" type="button">Subscribe</button><p>Renews automatically. Monthly credits expire at renewal. Applicable tax added at checkout.</p></div>
@@ -55,6 +55,8 @@
       <div id="byokSettings">
       <label>API provider<select id="provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select></label>
       <label><span id="keyLabel">TypeSafe API key</span><input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"></label>
+      <label class="consent"><input id="byokConsent" type="checkbox">I am 18 or older and use ClickIt for casual quizzes where assistance is permitted. I agree to send the question and choices in Text, or the whole visible-tab screenshot in Vision, directly to my selected provider, TypeSafe or OpenRouter, for TypeSafe's Jev model to suggest an answer. Screenshots may include personal information. My provider bills my account.</label>
+      <p class="account-links"><a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Privacy and terms</a> · <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter privacy</a> · <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy</a></p>
       </div>
       <div class="prompt-field" id="promptSettings">
         <div class="prompt-heading"><label id="promptLabel" for="textPrompt">Text prompt</label><button id="resetPrompt" type="button">Reset</button></div>

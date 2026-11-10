@@ -3,10 +3,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { parseArgs } = require('node:util');
+const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
-const { values: { 'api-url': rawUrl = '', 'support-url': supportUrl } } = parseArgs({
-  options: { 'api-url': { type: 'string' }, 'support-url': { type: 'string', default: 'mailto:thammatorn.j@gmail.com' } }
+const { values: { 'api-url': rawUrl = '', 'support-url': supportUrl, 'public-key-file': publicKeyFile } } = parseArgs({
+  options: { 'api-url': { type: 'string' }, 'support-url': { type: 'string', default: 'mailto:thammatorn.j@gmail.com' }, 'public-key-file': { type: 'string' } }
 });
+let publicKey;
+if (publicKeyFile) {
+  const encoded = fs.readFileSync(publicKeyFile, 'utf8').replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
+  const key = crypto.createPublicKey({ key: Buffer.from(encoded, 'base64'), format: 'der', type: 'spki' });
+  publicKey = key.export({ format: 'der', type: 'spki' }).toString('base64');
+}
 let apiUrl = '';
 if (rawUrl) {
   const parsed = new URL(rawUrl);
@@ -23,6 +30,7 @@ fs.writeFileSync(path.join(output, 'config.js'), `globalThis.ClickItConfig = Obj
 const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'));
 if (apiUrl) manifest.host_permissions.push(`${apiUrl}/*`);
 if (apiUrl) manifest.homepage_url = apiUrl;
+if (publicKey) manifest.key = publicKey;
 fs.writeFileSync(path.join(output, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 if (process.platform === 'win32') {
   // Both paths are fixed inside dist; no shell interpolation of user arguments.

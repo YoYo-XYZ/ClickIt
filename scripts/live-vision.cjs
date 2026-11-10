@@ -31,7 +31,7 @@ async function main() {
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
     await popup.waitForFunction(() => !document.getElementById('saveSettings').disabled);
     const save = await popup.evaluate(settings => chrome.runtime.sendMessage({ type: 'save', settings }), {
-      mode: 'vision', provider, apiKey, timeoutMs: 15000, minConfidence: 0
+      mode: 'vision', provider, apiKey, byokConsent: true, timeoutMs: 15000, minConfidence: 0
     });
     assert.ok(save.ok, save.error);
     await page.bringToFront();

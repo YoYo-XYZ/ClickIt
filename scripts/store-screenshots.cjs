@@ -9,7 +9,8 @@ const { chromium } = require('playwright');
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
     for (const [name, title, detail] of [
       ['hosted-answer', 'One question. One click.', 'Get a selected answer or a highlight to click yourself. You stay in control of submission.'],
-      ['hosted-trial', 'Try 10 free suggestions.', 'AI included. Monthly Basic: US$4.99 / 500 credits. Plus: US$9.99 / 1,200 credits. Renews until canceled; monthly credits expire.']
+      ['hosted-subscription', 'Start free. Choose a plan.', '10 free suggestions. Basic: US$4.99 / month for 500 credits. Plus: US$9.99 / month for 1,200 credits. Renews until canceled; monthly credits expire.'],
+      ['hosted-settings', 'Control your setup.', 'Choose Text or Vision, manage your answer hotkey, and back up your credit access. Advanced settings also support your own TypeSafe or OpenRouter API key.']
     ]) {
       const source = path.resolve(__dirname, `../test-results/${name}.png`);
       if (!fs.existsSync(source)) throw new Error(`Run npm test first. Missing ${source}`);

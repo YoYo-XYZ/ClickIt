@@ -295,6 +295,7 @@ export function billingService({ env, fetchImpl, now, fail }) {
         'metadata[clickit_checkout]': attempt, 'subscription_data[metadata][clickit_installation]': owner,
         'line_items[0][price]': prices[plan.id], 'line_items[0][quantity]': '1',
         success_url: `${publicUrl()}/purchase.html`, cancel_url: `${publicUrl()}/purchase.html?cancelled=1`,
+        'custom_text[submit][message]': `Renews monthly until canceled. Monthly credits expire at renewal. See [terms and refunds](${publicUrl()}/terms.html) and [privacy](${publicUrl()}/privacy.html).`,
         'automatic_tax[enabled]': 'false'
       }, `subscription-checkout:${attempt}`);
       if (!/^cs_[A-Za-z0-9_]+$/.test(session.id || '') || new URL(session.url).origin !== 'https://checkout.stripe.com') fail(502, 'Unexpected checkout URL.');

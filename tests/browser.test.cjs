@@ -60,7 +60,7 @@ async function configure(overrides = {}, response = {}) {
   try {
     await worker.evaluate(config => { globalThis.mock = config; globalThis.apiCalls = []; globalThis.captures = []; }, { body: payload(), ...response });
     const reply = await controls.evaluate(settings => chrome.runtime.sendMessage({ type: 'save', settings }), {
-      provider: 'typesafe', apiKey: 'fake-test-key', timeoutMs: 2500, minConfidence: 0, ...overrides
+      provider: 'typesafe', apiKey: 'fake-test-key', byokConsent: true, timeoutMs: 2500, minConfidence: 0, ...overrides
     });
     assert.equal(reply.ok, true, reply.error);
   } finally { await controls.close(); }
@@ -109,10 +109,39 @@ test('manifest has only user-triggered page access; old settings are discarded',
   assert.deepEqual(manifest.host_permissions, ['https://api.typesafe.ai/*', 'https://openrouter.ai/*']);
   await configure({ enabled: true, answerBank: { Question: 'Answer' }, questionSelector: 'h1', settleMs: 8 });
   const saved = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
-  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'billingMode', 'minConfidence', 'mode', 'provider', 'textPrompt', 'timeoutMs', 'visionPrompt']);
+  assert.deepEqual(Object.keys(saved).sort(), ['apiKey', 'billingMode', 'byokConsent', 'minConfidence', 'mode', 'provider', 'textPrompt', 'timeoutMs', 'visionPrompt']);
   assert.equal(saved.billingMode, 'byok');
   assert.equal(saved.mode, 'text');
   assert.equal(saved.apiKey, 'fake-test-key');
+});
+
+test('API-key users must explicitly accept disclosure before answering, and changing provider clears consent', async () => {
+  await configure({ byokConsent: false });
+  await scenario(fixture, async (page, controls) => {
+    const reply = await start(page, controls);
+    assert.equal(reply.ok, false);
+    assert.match(reply.error, /data sharing disclosure/);
+    assert.equal((await calls()).length, 0);
+    assert.equal(await worker.evaluate(() => captures.length), 0);
+    await controls.locator('#answerNow').click();
+    await controls.locator('#byokConsent').waitFor({ state: 'visible' });
+    assert.equal(await controls.locator('#byokConsent').isChecked(), false);
+    await controls.locator('#byokConsent').check();
+    await controls.locator('#saveSettings').click();
+    await until(() => worker.evaluate(() => settings.byokConsent));
+    await start(page, controls);
+    assert.equal((await finished(page)).answer, '4');
+    await controls.locator('#settingsToggle').click();
+    await controls.locator('#provider').selectOption('openrouter');
+    assert.equal(await controls.locator('#byokConsent').isChecked(), false);
+    await controls.locator('#saveSettings').click();
+    await until(() => worker.evaluate(() => !settings.byokConsent));
+    await controls.reload();
+    await controls.locator('#settingsToggle').click();
+    assert.equal(await controls.locator('#byokConsent').isChecked(), false);
+    assert.equal((await start(page, controls)).ok, false);
+    assert.equal((await calls()).length, 1);
+  });
 });
 
 test('Answer makes one click, never submits, and never follows new questions', async () => {
@@ -637,6 +666,7 @@ test('Vision cancels changed questions, choices, target controls, scrolling, res
     page => page.evaluate(() => { document.getElementById('option4').disabled = true; }),
     page => page.evaluate(() => scrollTo(0, 100)),
     page => page.setViewportSize({ width: 1300, height: 740 }),
+    page => page.keyboard.press('a'),
     page => page.evaluate(() => history.pushState({}, '', '/another-question')),
     page => page.reload()
   ];
@@ -653,6 +683,25 @@ test('Vision cancels changed questions, choices, target controls, scrolling, res
       else assert.match(result.text, /changed|supported, enabled/);
       assert.deepEqual(await page.evaluate(() => clicks), []);
       assert.equal((await calls()).length, 1);
+    });
+  }
+});
+
+test('Vision ignores lock-key events without ignoring question changes', async () => {
+  for (const changeQuestion of [false, true]) {
+    await configure({ mode: 'vision' }, { delay: 250 });
+    await scenario(visionFixture, async (page, controls) => {
+      await mockVision(page);
+      await start(page, controls);
+      await until(async () => (await calls()).length === 1);
+      await page.evaluate(changeQuestion => {
+        for (const key of ['NumLock', 'CapsLock', 'ScrollLock']) window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        if (changeQuestion) document.getElementById('question').textContent = 'Changed question';
+      }, changeQuestion);
+      const result = await finished(page);
+      assert.deepEqual(await page.evaluate(() => clicks), changeQuestion ? [] : ['4']);
+      if (changeQuestion) assert.match(result.text, /changed/);
+      else assert.equal(result.answer, '4', result.text);
     });
   }
 });

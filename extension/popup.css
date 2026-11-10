@@ -68,7 +68,7 @@ textarea { width: 100%; padding: 10px; border: 1px solid #35414f; border-radius:
 #startTrial, #buyCredits { width: 100%; margin-top: 12px; }
 #refreshBalance { font-size: 12px; }
 a { color: #9becce; }
-.account-links { display: flex; gap: 16px; }
+.account-links { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12px; }
 #accessRecovery { margin-top: 18px; }
 #accessRecovery summary { cursor: pointer; }
 #hostedAccessKey { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; }

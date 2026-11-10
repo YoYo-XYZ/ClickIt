@@ -2,7 +2,7 @@
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
-Version 1.0.0 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. Checkout and hosted Vision remain disabled until launch validation is complete.
+Version 1.0.0 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. The store release includes hosted Text and Vision and Stripe subscriptions. Production checkout and hosted Vision remain gated until their launch checks pass.
 
 For the configured local pilot, load `dist/extension` in Chrome. The backend currently allows that folder's development extension ID. The source `extension` folder remains an unconfigured development build. Publish the Chrome Web Store extension and configure its assigned origin before distributing it to customers.
 
@@ -15,7 +15,7 @@ For the configured local pilot, load `dist/extension` in Chrome. The backend cur
 
 1. [Download ZIP](https://github.com/YoYo-XYZ/ClickIt/archive/refs/heads/main.zip) and extract it.
 2. In `chrome://extensions`, enable **Developer mode**. Click **Load unpacked** and select the `extension` folder.
-3. For the source development build, open **Settings**, choose **Advanced · your API key**, select your provider, paste your key, and save. Configured release builds offer **Start free trial** with included AI instead.
+3. For the source development build, open **Settings**, choose **Advanced · your API key**, select your provider, paste your key, accept the data sharing disclosure, and save. Configured release builds offer **Start free trial** with included AI instead.
 
 ## Use it
 

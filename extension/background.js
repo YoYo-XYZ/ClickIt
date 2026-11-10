@@ -51,6 +51,7 @@ async function startAnswer(tab) {
   try {
     if (tab.url && !/^https?:\/\//.test(tab.url)) throw new Error('Open a regular webpage and press Answer or use the answer hotkey.');
     if (config.billingMode === 'byok' && !config.apiKey) throw new Error('Add your API key in Settings first.');
+    if (config.billingMode === 'byok' && !config.byokConsent) throw new Error('Review and accept the data sharing disclosure in Settings before answering.');
     if (config.billingMode === 'hosted') {
       const hosted = await ClickItHosted.state();
       if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');

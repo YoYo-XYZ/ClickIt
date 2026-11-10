@@ -140,6 +140,7 @@ async function refresh(initial = false) {
       saved = data.settings;
       for (const key of Object.keys(ClickIt.defaults)) {
         if (key === 'mode') selectMode(data.settings.mode);
+        else if ($(key)?.type === 'checkbox') $(key).checked = data.settings[key];
         else if ($(key)) $(key).value = data.settings[key];
       }
       loaded = true;
@@ -151,7 +152,7 @@ async function refresh(initial = false) {
     controls();
   } catch (error) { $('message').textContent = error.message; }
 }
-$('provider').addEventListener('change', showProvider);
+$('provider').addEventListener('change', () => { $('byokConsent').checked = false; showProvider(); });
 $('billingMode').addEventListener('change', showBilling);
 async function saveMode() {
   while (selectedMode() !== saved.mode) {
@@ -177,7 +178,8 @@ $('mode').addEventListener('change', () => {
 $('settings').addEventListener('submit', async event => {
   event.preventDefault();
   await withAction(async () => {
-    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key, key === 'mode' ? selectedMode() : ($(key)?.value ?? saved[key])])));
+    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key,
+      key === 'mode' ? selectedMode() : $(key)?.type === 'checkbox' ? $(key).checked : ($(key)?.value ?? saved[key])])));
     await send({ type: 'save', settings });
     saved = settings;
     $('apiKey').value = settings.apiKey;
@@ -193,6 +195,7 @@ $('answerNow').addEventListener('click', async () => {
       await refresh();
     } catch (error) {
       if (error.message.includes('API key')) { showSettings(true); $('apiKey').focus(); }
+      if (error.message.includes('data sharing')) { showSettings(true); $('byokConsent').focus(); }
       throw error;
     }
   });

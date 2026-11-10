@@ -16,6 +16,9 @@ for (const planId of ['basic','plus']) test(`${planId} Checkout uses fixed month
   assert.equal(form.get('mode'), 'subscription'); assert.equal(form.get('line_items[0][price]'), `price_${planId}`);
   assert.equal(form.get('line_items[0][quantity]'), '1'); assert.equal(form.has('allow_promotion_codes'), false);
   assert.equal(form.get('subscription_data[metadata][clickit_installation]'), user.installationId);
+  assert.match(form.get('custom_text[submit][message]'), /Renews monthly until canceled/);
+  assert.match(form.get('custom_text[submit][message]'), /https:\/\/clickit.example\/terms.html/);
+  assert.match(form.get('custom_text[submit][message]'), /https:\/\/clickit.example\/privacy.html/);
   const sub = await s.complete(user, planId);
   const amount = planId === 'basic' ? 500 : 1200;
   assert.equal((await s.balance(user)).monthlyCredits, amount);
