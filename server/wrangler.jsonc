@@ -35,10 +35,10 @@
     "TRIAL_ENABLED": "true",
     "INFERENCE_ENABLED": "true",
     "VISION_ENABLED": "true",
-    "CHECKOUT_ENABLED": "false",
+    "CHECKOUT_ENABLED": "true",
     "STRIPE_LIVE_MODE": "true",
     "STRIPE_BASIC_PRICE_ID": "price_1Ua7RLDC5PkZdLhQQMWrqvAH",
-    "STRIPE_PLUS_PRICE_ID": "price_1Ua7RLDC5PkZdLhQ4OMsFI7P",
+    "STRIPE_PLUS_PRICE_ID": "price_1Ua9qhDC5PkZdLhQe6vm0kbL",
     "STRIPE_PORTAL_CONFIGURATION_ID": "bpc_1Ua7RMDC5PkZdLhQgqCgkBjX"
   }
 }

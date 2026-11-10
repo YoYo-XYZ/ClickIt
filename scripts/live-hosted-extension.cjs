@@ -48,6 +48,11 @@ async function main() {
         document.body.innerHTML = '<form><fieldset><legend>What is 2 + 2?</legend><label><input id="option3" type="radio" name="answer" value="3">3</label><label><input id="option4" type="radio" name="answer" value="4">4</label></fieldset><button id="submit">Submit</button></form>';
         document.addEventListener('click', event => { if (event.target.type === 'radio') clicks[clicks.length - 1] = event.target.value; });
       });
+      await page.evaluate(() => {
+        document.addEventListener('submit', event => { submissions++; event.preventDefault(); }, true);
+        HTMLFormElement.prototype.submit = function () { submissions++; };
+        HTMLFormElement.prototype.requestSubmit = function () { submissions++; };
+      });
       const saved = await popup.evaluate(settings => chrome.runtime.sendMessage({ type: 'save', settings }), { mode, billingMode: 'hosted', minConfidence: 0, timeoutMs: 15000 });
       assert.ok(saved.ok, saved.error);
       await page.evaluate(() => { clicks.length = 0; submissions = 0; });
