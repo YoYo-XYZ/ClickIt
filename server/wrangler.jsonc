@@ -34,7 +34,7 @@
     "EXTENSION_ORIGINS": "chrome-extension://dkoabbnhhchhppmdjjnchaodddkekhjc,chrome-extension://dfpglkafpdbnfecohhgmhkpceinhhpjl",
     "TRIAL_ENABLED": "true",
     "INFERENCE_ENABLED": "true",
-    "VISION_ENABLED": "false",
+    "VISION_ENABLED": "true",
     "CHECKOUT_ENABLED": "false",
     "STRIPE_LIVE_MODE": "true",
     "STRIPE_BASIC_PRICE_ID": "price_1Ua7RLDC5PkZdLhQQMWrqvAH",
