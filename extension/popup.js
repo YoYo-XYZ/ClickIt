@@ -224,7 +224,7 @@ for (const [id, action] of Object.entries({ downgradePlan: 'downgrade', keepPlan
 $('upgradePlan').addEventListener('click', () => withAction(async () => {
   upgradeQuote = await send({ type: 'previewUpgrade' });
   const price = new Intl.NumberFormat(undefined, { style: 'currency', currency: upgradeQuote.currency }).format(upgradeQuote.amount / 100);
-  $('upgradeQuoteText').textContent = `Pay ${price} now to upgrade. Add ${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString()}. Then Plus renews at $9.99/month plus applicable tax. Quote valid for five minutes.`;
+  $('upgradeQuoteText').textContent = `Pay ${price} now to upgrade. Add ${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString()}. Then Plus renews at $9.99/month. Quote valid for five minutes.`;
   $('upgradeQuote').hidden = false;
 }));
 $('confirmUpgrade').addEventListener('click', async () => {

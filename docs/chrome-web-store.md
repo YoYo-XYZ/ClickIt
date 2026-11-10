@@ -16,7 +16,7 @@ ClickIt suggests one answer to a visible single-choice quiz question when you pr
 
 Text mode reads the visible question and answer choices. Vision mode sends a screenshot of the whole visible tab. ClickIt selects a supported answer control or highlights an answer for you to click. You review the suggestion and submit the quiz yourself. ClickIt never submits, advances to another question, or runs without an explicit Answer press or hotkey.
 
-Eligible new installations receive 10 free suggestions without a card. Basic costs US$4.99 per month for 500 credits. Plus costs US$9.99 per month for 1,200 credits. Plans renew automatically until canceled. Monthly credits expire at renewal and do not roll over. Applicable taxes, if any, are shown at checkout. Manage or cancel renewal in the extension. One valid delivered suggestion uses one credit, even if it is wrong. Failed requests and rejected page changes do not use credits.
+Eligible new installations receive 10 free suggestions without a card. Basic costs US$4.99 per month for 500 credits. Plus costs US$9.99 per month for 1,200 credits. Plans renew automatically until canceled. Monthly credits expire at renewal and do not roll over. Checkout shows the total before you subscribe. Manage or cancel renewal in the extension. One valid delivered suggestion uses one credit, even if it is wrong. Failed requests and rejected page changes do not use credits.
 
 Advanced settings support your own TypeSafe or OpenRouter API key, billed separately by your selected provider. Save separate Text and Vision prompts and manage Chrome's answer hotkey from Settings. Keep a private backup of your installation access key to restore hosted credits after reinstalling.
 
@@ -67,6 +67,7 @@ The user confirmed prior hands-on quiz testing. This release does not claim the 
 
 - Run `npm test`, `npm run test:hotkey:windows`, and `npm run check:worker` after final changes.
 - Run the separate Stripe test-clock suite with a private TEST key. A LIVE key must never substitute for it.
+- Provision the production `/v1/stripe/webhook` endpoint for the billing events, pin its API version to `2024-06-20`, and install its signing secret as `STRIPE_WEBHOOK_SECRET` in Worker secret storage. Verify delivery of an actual Stripe event, reject invalid signatures and test-mode events, and confirm that the owner's paid invoice grants 500 monthly credits exactly once before public paid launch.
 - Keep combined live validation spending below US$10, including the owner-completed Basic purchase. Cancel that test subscription's renewal.
 - Build with `npm run package:extension -- --api-url https://clickit.thammatorn-clickit.workers.dev`. Add `--public-key-file <public-key-file>` after the dashboard assigns the store item and exposes its public key. Check that the unpacked extension ID matches the assigned ID.
 - Run `node scripts/store-screenshots.cjs` after browser tests generate current interface captures. Upload the three 1280x800 PNGs and the existing 128x128 icon.
@@ -75,6 +76,8 @@ The user confirmed prior hands-on quiz testing. This release does not claim the 
 - Submit with automatic publication after approval. A draft or pending review is not a published listing.
 - Set `STORE_URL` only after verifying the approved listing is publicly installable. Then deploy and verify the website's installation link.
 - For rollback, disable new checkout and the affected inference mode, preserve records and balances, and retain billing management. A private prelaunch D1 export is stored outside Git.
+
+Before the live cutover on November 10, 2026, production had no paid legacy orders and Stripe had no open live Checkout sessions. The previous one-time price was absent from the live catalog, so it is not configured as a live product. The legacy settlement code remains available for deployments that have real legacy purchases.
 
 ## Version 1.0.0 release notes
 
