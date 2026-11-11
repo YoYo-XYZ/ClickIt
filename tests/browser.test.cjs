@@ -130,10 +130,10 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
     assert.equal(await controls.getByText('Data sharing details', { exact: true }).count(), 0);
     const consent = controls.locator('label').filter({ has: controls.locator('#byokConsent') });
-    assert.match(await consent.textContent(), /I'm 18\+ and agree to the Privacy Policy and Terms\./);
+    assert.match(await consent.textContent(), /I'm 18\+ and accept the Terms\. See the ClickIt, OpenRouter, and TypeSafe privacy policies\./);
     assert.equal(await controls.locator('#byokDisclosure').count(), 0);
-    for (const name of ['Privacy Policy', 'Terms', 'OpenRouter privacy', 'TypeSafe privacy']) {
-      assert.equal(await controls.locator('#byokSettings').getByRole('link', { name, exact: true }).isVisible(), true);
+    for (const name of ['ClickIt', 'Terms', 'OpenRouter', 'TypeSafe privacy policies']) {
+      assert.equal(await consent.getByRole('link', { name, exact: true }).isVisible(), true);
     }
     await controls.locator('#byokConsent').check();
     await controls.locator('#saveSettings').click();
@@ -466,10 +466,10 @@ test('API key settings collapse by default and toggle with the keyboard without 
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
     assert.equal(await controls.locator('#byokConsent').isChecked(), true);
-    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'Privacy Policy', exact: true }).isVisible(), true);
+    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'ClickIt', exact: true }).isVisible(), true);
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), false);
-    assert.equal(await controls.locator('#byokSettings .provider-privacy').isVisible(), false);
+    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'OpenRouter', exact: true }).isVisible(), false);
     await controls.getByRole('button', { name: 'Save settings', exact: true }).click();
     await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
     assert.equal(await worker.evaluate(() => settings.apiKey), 'fake-test-key');

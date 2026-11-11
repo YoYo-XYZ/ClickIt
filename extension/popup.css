@@ -51,7 +51,10 @@ form input, form select { display: block; width: 100%; margin-top: 7px; padding:
 .billing-mode input:checked + span { background: #283d38; color: #bcf3dc; }
 .api-credentials { margin-bottom: 14px; }
 .api-key-settings { margin-bottom: 16px; }
-.api-key-settings > summary { padding: 6px 0; color: #aab8c7; font-size: 12px; cursor: pointer; }
+.api-key-settings > summary { display: flex; align-items: center; gap: 6px; padding: 6px 0; color: #aab8c7; font-size: 12px; cursor: pointer; list-style: none; }
+.api-key-settings > summary::-webkit-details-marker { display: none; }
+.api-key-settings > summary::after { content: ""; width: 0; height: 0; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-left: 6px solid currentColor; }
+.api-key-settings[open] > summary::after { transform: rotate(90deg); }
 .api-key-settings[open] > summary { margin-bottom: 7px; }
 .api-key-settings > summary:focus-visible { outline: 2px solid #9becce; outline-offset: 2px; border-radius: 4px; }
 .api-credentials-controls { display: grid; grid-template-columns: 112px minmax(0, 1fr); border: 1px solid #35414f; border-radius: 8px; background: #17202a; }
@@ -81,7 +84,6 @@ textarea { width: 100%; padding: 10px; border: 1px solid #35414f; border-radius:
 #creditError:empty { display: none; }
 .consent { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; margin-top: 10px; }
 .consent input { width: auto; margin-top: 3px; padding: 0; flex: 0 0 auto; }
-.provider-privacy { margin: -6px 0 0 21px; line-height: 1.5; }
 #hostedPanel button, #accessRecovery button { padding: 8px 10px; border-radius: 8px; background: #283d38; color: #bcf3dc; }
 #startTrial, #buyCredits { width: 100%; margin-top: 12px; }
 #refreshBalance { font-size: 12px; }
