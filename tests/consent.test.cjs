@@ -33,7 +33,8 @@ test('restored hosted access requires local consent, preserves credits, and reme
   assert.equal(restored.consented, false);
   assert.equal(restored.balance.credits, 57);
   const question = { question: '2 + 2?', options: ['3', '4'] };
-  await assert.rejects(hosted.answer(question, 'text', { controller: new AbortController() }), /data sharing disclosure/);
+  const config = { mode: 'text', textPrompt: 'Choose the best answer.' };
+  await assert.rejects(hosted.answer(question, config, { controller: new AbortController() }), /data sharing disclosure/);
   await assert.rejects(hosted.register({ adultConsent: true, dataConsent: false }), /Confirm age and data processing/);
   assert.equal(calls.includes('/v1/answers'), false);
   await hosted.register({ adultConsent: true, dataConsent: true });
@@ -42,7 +43,7 @@ test('restored hosted access requires local consent, preserves credits, and reme
   const restarted = load();
   assert.equal((await restarted.state()).consented, true);
   const job = { controller: new AbortController() };
-  assert.equal((await restarted.answer(question, 'text', job)).index, 1);
+  assert.equal((await restarted.answer(question, config, job)).index, 1);
   await restarted.complete(job, true);
   assert.equal(calls.filter(route => route === '/v1/answers').length, 1);
 });

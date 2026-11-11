@@ -46,7 +46,6 @@ async function withAction(action) {
 function showBilling() {
   const byok = $('billingMode').value === 'byok';
   $('byokSettings').hidden = !byok;
-  $('promptSettings').hidden = !byok;
   $('hostedPanel').hidden = byok;
 }
 function showCredits() {

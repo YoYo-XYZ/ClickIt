@@ -88,7 +88,8 @@
     })();
     try { return await registering; } finally { registering = null; }
   }
-  async function answer(q, mode, job) {
+  async function answer(q, config, job) {
+    const { mode } = config;
     await ready;
     if (!consented) throw new Error('Review and accept the data sharing disclosure in the popup before answering.');
     await reconcile();
@@ -99,7 +100,7 @@
     // Persist a default release before sending so worker restarts never strand credits.
     pending[job.hostedRequestId] = false;
     await chrome.storage.local.set({ hostedPending: pending });
-    const result = await api('answers', { requestId: job.hostedRequestId, mode,
+    const result = await api('answers', { requestId: job.hostedRequestId, mode, prompt: config[`${mode}Prompt`],
       ...(mode === 'vision' ? { image: q.data } : { question: q }) }, { signal: job.controller.signal });
     // Validate again before any page interaction. The backend never returns executable code.
     const validated = mode === 'text' ? ClickIt.validateAnswer(result.result, q.options.length) : ClickIt.validateVision(result.result);

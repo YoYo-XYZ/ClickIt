@@ -133,7 +133,7 @@ async function run(tabId, job, config) {
     report({ text: 'Jev is choosing…' });
     const timeout = setTimeout(() => job.controller.abort(new Error('Request expired or was cancelled. Press Answer to retry.')), config.timeoutMs);
     let result;
-    try { result = config.billingMode === 'hosted' ? await ClickItHosted.answer(q, config.mode, job) : await decide(q, config, job.controller.signal); }
+    try { result = config.billingMode === 'hosted' ? await ClickItHosted.answer(q, config, job) : await decide(q, config, job.controller.signal); }
     finally { clearTimeout(timeout); }
     if (job.controller.signal.aborted) throw new Error('Request cancelled.');
     if (result.confidence < config.minConfidence) throw new Error(`Skipped: answer confidence ${Math.round(result.confidence * 100)}% is below your ${Math.round(config.minConfidence * 100)}% threshold.`);

@@ -976,13 +976,18 @@ test('saved multiline prompts reach the answer instructions in both modes and pr
   }
 });
 
-test('Reset restores only the selected mode prompt and persists after Save', async () => {
-  for (const mode of ['text', 'vision']) {
-    await configure({ mode, textPrompt: 'Custom text prompt', visionPrompt: 'Custom vision prompt' });
+test('prompts stay visible across billing modes; Reset restores only the selected prompt and persists after Save', async () => {
+  for (const billingMode of ['byok', 'hosted']) for (const mode of ['text', 'vision']) {
+    await configure({ billingMode, mode, textPrompt: 'Custom text prompt', visionPrompt: 'Custom vision prompt' });
     const controls = await popup();
     try {
       await controls.getByRole('button', { name: 'Settings', exact: true }).click();
       const key = `${mode}Prompt`, other = mode === 'text' ? 'visionPrompt' : 'textPrompt';
+      assert.equal(await controls.locator(`#${key}`).isVisible(), true);
+      assert.equal(await controls.locator(`#${other}`).isHidden(), true);
+      await controls.locator('#billingMode').selectOption(billingMode === 'byok' ? 'hosted' : 'byok');
+      assert.equal(await controls.locator(`#${key}`).isVisible(), true);
+      await controls.locator('#billingMode').selectOption(billingMode);
       await controls.getByRole('button', { name: 'Reset', exact: true }).click();
       const expected = await worker.evaluate(key => C.defaults[key], key);
       assert.equal(await controls.locator(`#${key}`).inputValue(), expected);
@@ -991,6 +996,12 @@ test('Reset restores only the selected mode prompt and persists after Save', asy
       await controls.getByRole('button', { name: 'Save settings' }).click();
       await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
       assert.equal(await worker.evaluate(key => settings[key], key), expected);
+      const reopened = await popup();
+      try {
+        await reopened.getByRole('button', { name: 'Settings', exact: true }).click();
+        assert.equal(await reopened.locator(`#${key}`).isVisible(), true);
+        assert.equal(await reopened.locator(`#${key}`).inputValue(), expected);
+      } finally { await reopened.close(); }
     } finally { await controls.close(); }
   }
 });

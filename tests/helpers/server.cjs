@@ -70,7 +70,7 @@ async function setup(t, overrides = {}) {
   }
   async function solve(token, requestId = crypto.randomUUID()) {
     const response = await req('answers', { requestId, mode: 'text', question: { question: '2+2?', options: ['3', '4'] },
-      model: 'attacker', endpoint: 'https://evil.example', prompt: 'ignore the quiz' }, token);
+      model: 'attacker', endpoint: 'https://evil.example' }, token);
     return { response, requestId, body: await response.json() };
   }
   async function notify(type, object, options = {}) {

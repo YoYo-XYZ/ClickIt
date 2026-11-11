@@ -2,6 +2,26 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { setup, answer } = require('./helpers/server.cjs');
 
+test('hosted prompts are validated before reserving credits and custom Text instructions reach the provider', async t => {
+  const s = await setup(t, { VISION_ENABLED: 'true' });
+  const user = await s.register();
+  for (const mode of ['text', 'vision']) {
+    for (const prompt of ['', ' \n ', 'x'.repeat(6001), null, 42, {}]) {
+      const response = await s.req('answers', { requestId: crypto.randomUUID(), mode, prompt,
+        question: { question: '2+2?', options: ['3', '4'] }, image: 'iVBORw0KGgo=' }, user.credential);
+      assert.equal(response.status, 400);
+      assert.match((await response.json()).error, /Prompts/);
+    }
+  }
+  assert.equal(s.calls.length, 0);
+  assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM requests').get().n, 0);
+  const prompt = 'Read state.question carefully.\nChoose the best supplied option.';
+  const response = await s.req('answers', { requestId: crypto.randomUUID(), mode: 'text', prompt,
+    question: { question: '2+2?', options: ['3', '4'] } }, user.credential);
+  assert.equal(response.status, 200);
+  assert.equal(JSON.parse(s.calls[0].options.body).questions.answer.instructions, prompt);
+});
+
 test('trial consent, opaque credentials, stored hashes, source, IP rate limit, and 100-install cap', async t => {
   const s = await setup(t);
   assert.equal((await s.req('installations', { adultConsent: false, dataConsent: true })).status, 400);
@@ -21,7 +41,7 @@ test('trial consent, opaque credentials, stored hashes, source, IP rate limit, a
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM credit_lots').get().n, 100);
 });
 
-test('hosted requests use pinned server prompts, settle once, and reject a second active request', async t => {
+test('hosted requests use default prompts when omitted, settle once, and reject a second active request', async t => {
   const s = await setup(t);
   const user = await s.register();
   const first = await s.solve(user.credential);
@@ -29,7 +49,7 @@ test('hosted requests use pinned server prompts, settle once, and reject a secon
   assert.equal(first.body.result.index, 1);
   const upstream = JSON.parse(s.calls[0].options.body);
   assert.equal(upstream.model, 'typesafe/jev-1.14');
-  assert.equal(upstream.questions.answer.instructions.includes('ignore the quiz'), false);
+  assert.equal(upstream.questions.answer.instructions, globalThis.ClickIt.defaults.textPrompt);
   assert.equal(s.calls[0].url, 'https://openrouter.ai/api/alpha/decisions');
   assert.deepEqual(upstream.provider, { only:['typesafe'], allow_fallbacks:false, max_price:{prompt:.042,completion:0,request:0,image:0} });
   assert.equal(s.calls[0].options.headers.Authorization, 'Bearer private-provider-secret');
@@ -220,7 +240,7 @@ test('hosted Vision accepts independent target boxes and visibility failures ret
     target: region({ left:.1, top:.4, right:.4, bottom:.6 })
   } };
   const requestId = crypto.randomUUID();
-  const input = { requestId, mode:'vision', image:'iVBORw0KGgo=', prompt:'untrusted prompt' };
+  const input = { requestId, mode:'vision', image:'iVBORw0KGgo=', prompt:'Read the visible quiz.\nBound the best answer button.' };
   const response = await s.req('answers', input, user.credential);
   assert.equal(response.status, 200);
   assert.ok((await response.json()).result.boxes.target);
@@ -228,10 +248,11 @@ test('hosted Vision accepts independent target boxes and visibility failures ret
   assert.equal(s.calls[0].url, 'https://openrouter.ai/api/alpha/decisions');
   const upstream = JSON.parse(s.calls[0].options.body);
   assert.equal(Object.values(upstream.assets)[0].data_base64, input.image);
-  assert.equal(upstream.questions.target.instructions.includes('untrusted prompt'), false);
+  assert.equal(upstream.questions.target.instructions, input.prompt);
   await s.req('answers/complete', { requestId, delivered:true }, user.credential);
   s.state.provider.answers.ready.noul = .2;
-  assert.equal((await s.req('answers', { ...input, requestId:crypto.randomUUID() }, user.credential)).status, 422);
+  assert.equal((await s.req('answers', { ...input, prompt: undefined, requestId:crypto.randomUUID() }, user.credential)).status, 422);
+  assert.equal(JSON.parse(s.calls[1].options.body).questions.target.instructions, globalThis.ClickIt.defaults.visionPrompt);
   assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 9);
 });
 

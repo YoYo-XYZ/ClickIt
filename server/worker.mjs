@@ -68,18 +68,22 @@ async function identity(request, db) {
 }
 function requestData(data, env) {
   if (!/^[a-f0-9-]{36}$/.test(data.requestId || '')) fail(400, 'A valid request ID is required.');
+  if (!['text', 'vision'].includes(data.mode)) fail(400, 'Choose Text or Vision mode.');
+  const key = `${data.mode}Prompt`;
+  let prompt;
+  try { prompt = C.validateSettings(data.prompt === undefined ? {} : { [key]: data.prompt })[key]; }
+  catch (error) { fail(400, error.message); }
   if (data.mode === 'text') {
     let question;
     try { question = C.validateQuestion(data.question); } catch { fail(400, 'Invalid quiz question or choices.'); }
     if (JSON.stringify(question).length > 60000) fail(413, 'Question is too large.');
-    return { body: C.requestBody(question, 'openrouter'), count: question.options.length, mode: 'text' };
+    return { body: C.requestBody(question, 'openrouter', prompt), count: question.options.length, mode: 'text' };
   }
   if (data.mode === 'vision') {
     if (env.VISION_ENABLED !== 'true') fail(403, 'Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
     if (typeof data.image !== 'string' || data.image.length > 2_800_000 || !/^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/.test(data.image)) fail(400, 'A resized PNG screenshot is required.');
-    return { body: C.visionRequest(data.image, 'openrouter'), mode: 'vision' };
+    return { body: C.visionRequest(data.image, 'openrouter', prompt), mode: 'vision' };
   }
-  fail(400, 'Choose Text or Vision mode.');
 }
 async function webhook(request, env, fetchImpl, now) {
   if (!env.STRIPE_WEBHOOK_SECRET) fail(503, 'Webhook is not configured.');

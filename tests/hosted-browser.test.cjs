@@ -137,7 +137,7 @@ test('a hosted suggestion clicks once then settles, while balance refresh never 
     const request = calls.find(c => c.route === '/v1/answers');
     assert.deepEqual(request.body.question.options, ['3','4']);
     assert.equal(request.authorization, `Bearer ${token}`);
-    assert.equal(request.body.prompt, undefined);
+    assert.equal(request.body.prompt, await worker.evaluate(() => settings.textPrompt));
     const completion = calls.find(c => c.route === '/v1/answers/complete');
     assert.equal(completion.body.delivered, true);
     assert.equal(completion.body.requestId, request.body.requestId);
@@ -187,11 +187,18 @@ test('malformed hosted Text and Vision results release the credit without clicki
         await ClickItHosted.state(true);
       }, { mode, result });
       await scenario(async (quiz, controls) => {
+        const key = `${mode}Prompt`, prompt = `Custom ${mode} instructions.\nChoose the best answer.`;
+        await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+        await controls.locator(`#${key}`).fill(prompt);
+        await controls.getByRole('button', { name: 'Save settings' }).click();
+        await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+        await quiz.bringToFront();
         assert.equal((await start(controls)).ok, true);
         await finish();
         assert.equal(await quiz.evaluate(() => clicks), 0);
         const calls = await worker.evaluate(() => hostedCalls);
         assert.equal(calls.find(c => c.route === '/v1/answers').body.mode, mode);
+        assert.equal(calls.find(c => c.route === '/v1/answers').body.prompt, prompt);
         assert.equal(calls.find(c => c.route === '/v1/answers/complete').body.delivered, false);
       });
     }

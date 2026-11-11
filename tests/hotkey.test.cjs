@@ -20,7 +20,7 @@ async function background(overrides = {}) {
     },
     ClickItHosted: {
       state: async () => { if (overrides.waitForSetup) await pending; return hosted; },
-      answer: async (_q, mode, job) => {
+      answer: async (_q, { mode }, job) => {
         calls.push(mode); await pending;
         if (overrides.result) job.hostedRequestId = 'test-request';
         return overrides.result || { index: 1, confidence: 1 };
