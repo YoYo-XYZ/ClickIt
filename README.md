@@ -2,9 +2,9 @@
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
-Version 1.0.0 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The pilot runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. The store release includes hosted Text and Vision and Stripe subscriptions. Production checkout and hosted Vision remain gated until their launch checks pass.
+Version 1.0.1 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The service runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. The configured GitHub release includes hosted Text and Vision and subscription access.
 
-For the configured local pilot, load `dist/extension` in Chrome. The backend currently allows that folder's development extension ID. The source `extension` folder remains an unconfigured development build. Publish the Chrome Web Store extension and configure its assigned origin before distributing it to customers.
+Download the configured ZIP from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest) for hosted access. It includes the assigned extension identity recognized by the backend. The source `extension` folder remains an unconfigured development build for API-key use.
 
 <p>
   <img src="docs/images/answer.png" width="300" align="top" alt="ClickIt with the Vision selector, Answer button, and status message">
@@ -13,9 +13,9 @@ For the configured local pilot, load `dist/extension` in Chrome. The backend cur
 
 ## Start in 3 steps
 
-1. [Download ZIP](https://github.com/YoYo-XYZ/ClickIt/archive/refs/heads/main.zip) and extract it.
-2. In `chrome://extensions`, enable **Developer mode**. Click **Load unpacked** and select the `extension` folder.
-3. For the source development build, open **Settings**, choose **Advanced · your API key**, select your provider, paste your key, accept the data sharing disclosure, and save. Configured release builds offer **Start free trial** with included AI instead.
+1. Download **ClickIt-v1.0.1.zip** from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest) and extract it.
+2. In `chrome://extensions`, enable **Developer mode**. Click **Load unpacked** and select the extracted folder containing `manifest.json`.
+3. Open ClickIt, review the data-sharing disclosure, and choose **Start free trial**. To use your own provider key, open **Settings**, choose **Advanced · your API key**, select your provider, enter its key, accept the disclosure, and save.
 
 ## Use it
 
