@@ -28,19 +28,18 @@
   </section>
   <section id="settingsPanel" hidden>
     <form id="settings">
-      <fieldset id="billingMode" class="billing-mode">
-        <legend>AI access</legend>
+      <fieldset id="billingMode" class="billing-mode" aria-label="AI access">
         <div class="billing-mode-options">
-          <label class="mode-option"><input type="radio" name="billingMode" value="hosted" checked><span>Included AI</span></label>
+          <label class="mode-option"><input type="radio" name="billingMode" value="hosted" checked><span>ClickIt</span></label>
           <label class="mode-option"><input type="radio" name="billingMode" value="byok"><span>Your API key</span></label>
         </div>
         <section id="hostedPanel" aria-label="AI credits">
-          <div class="credit-heading"><strong id="creditBalance">AI included</strong><button id="refreshBalance" type="button">Refresh</button></div>
+          <div class="credit-heading"><strong id="creditBalance">10 free suggestions</strong><button id="refreshBalance" type="button">Refresh</button></div>
           <p id="creditBreakdown" hidden></p>
-          <p id="creditNote">10 free suggestions. Then choose a monthly subscription. No card required to try.</p>
+          <p id="creditNote">Then Basic $4.99/month or Plus $9.99/month. No card required to try.</p>
           <div id="trialConsent">
             <label class="consent"><input id="adultConsent" type="checkbox">I am 18 or older and use ClickIt for casual quizzes.</label>
-            <label class="consent"><input id="dataConsent" type="checkbox">I agree to send the question and choices in Text, or the whole visible-tab screenshot in Vision, through ClickIt and OpenRouter to TypeSafe's Jev model to suggest an answer. Screenshots may include personal information.</label>
+            <label class="consent"><input id="dataConsent" type="checkbox">I consent to ClickIt, OpenRouter and TypeSafe processing quiz text or visible-tab screenshots, which may include personal data, for answers.</label>
             <button id="startTrial" type="button">Start free trial</button>
           </div>
           <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan</label><select id="subscriptionPlan"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" type="button">Subscribe</button><p>Renews automatically. Monthly credits expire at renewal. See your total before subscribing.</p></div>

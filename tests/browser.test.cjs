@@ -426,7 +426,7 @@ test('AI access segments support keyboard switching and persist the selected bil
   const controls = await popup();
   try {
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
-    const included = controls.getByRole('radio', { name: 'Included AI', exact: true });
+    const included = controls.getByRole('radio', { name: 'ClickIt', exact: true });
     const ownKey = controls.getByRole('radio', { name: 'Your API key', exact: true });
     assert.equal(await ownKey.isChecked(), true);
     await ownKey.focus();

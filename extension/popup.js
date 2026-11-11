@@ -83,7 +83,7 @@ function showCredits() {
     live ? `${planName} renews ${date}. ${sub.allowance} credits per month, no rollover.${value.monthlyCredits === 0 ? ' Upgrade or wait for renewal; your own API key is also available.' : ''}` :
     !value?.checkoutEnabled ? 'Subscriptions are not available yet. Your credits are preserved.' :
     'Choose Basic or Plus. Renews monthly until canceled. Monthly credits do not roll over.'
-  ) : '10 free suggestions, then Basic $4.99/month or Plus $9.99/month. No card required to try.';
+  ) : 'Then Basic $4.99/month or Plus $9.99/month. No card required to try.';
   $('creditError').textContent = hosted.error || (value?.billingSyncError ? 'Billing sync needs attention. Refresh later or contact support.' : !hosted.configured ? 'Hosted AI is not connected in this build. Advanced settings supports your own API key.' : '');
 }
 function showPrompt() {
