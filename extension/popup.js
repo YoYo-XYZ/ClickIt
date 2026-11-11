@@ -198,9 +198,10 @@ $('answerNow').addEventListener('click', async () => {
       await refresh();
     } catch (error) {
       if (error.message.includes('API key')) { showSettings(true); $('byokSettings').open = true; $('apiKey').focus(); }
+      if (error.message.includes('free trial')) { showSettings(true); $('adultConsent').focus(); }
       if (error.message.includes('data sharing')) {
         if (saved.billingMode === 'byok') { showSettings(true); $('byokSettings').open = true; $('byokConsent').focus(); }
-        else { showSettings(false); $('dataConsent').focus(); }
+        else { showSettings(true); $('dataConsent').focus(); }
       }
       throw error;
     }

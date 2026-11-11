@@ -55,8 +55,8 @@ async function startAnswer(tab) {
     if (config.billingMode === 'hosted') {
       const hosted = await ClickItHosted.state();
       if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
-      if (!hosted.registered) throw new Error('Start your free trial first.');
-      if (!hosted.consented) throw new Error('Review and accept the data sharing disclosure in the popup before answering.');
+      if (!hosted.registered) throw new Error('Start your free trial in Settings under AI access first.');
+      if (!hosted.consented) throw new Error('Review and accept the data sharing disclosure in Settings before answering.');
       if (config.mode === 'vision' && !hosted.balance?.visionEnabled) throw new Error('Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
     }
     job.controller.signal.throwIfAborted();

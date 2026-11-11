@@ -99,12 +99,28 @@ async function scenario(action) {
 async function start(controls) { return controls.evaluate(() => chrome.runtime.sendMessage({ type: 'answer' })); }
 async function finish() { await until(() => worker.evaluate(() => jobs.size === 0)); }
 
+test('Answer opens AI access in Settings when a hosted trial is needed', async () => {
+  await scenario(async (_quiz, controls) => {
+    assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
+    await controls.locator('#answerNow').click();
+    await controls.locator('#adultConsent').waitFor({ state: 'visible' });
+    assert.equal(await controls.locator('#settingsToggle').getAttribute('aria-expanded'), 'true');
+    assert.equal(await controls.locator('#adultConsent').evaluate(node => node === document.activeElement), true);
+    assert.match(await controls.locator('#message').textContent(), /free trial/);
+    assert.equal(await controls.locator('#message').isVisible(), true);
+    assert.equal((await worker.evaluate(() => hostedCalls)).length, 0);
+  });
+});
+
 test('new hosted installations ask for consent and never send an API request just by opening the popup', async () => {
   const controls = await popup();
   try {
     assert.equal(await controls.locator('input[name="billingMode"][value="hosted"]').isChecked(), true);
     assert.equal(await controls.locator('#startTrial').isDisabled(), true);
     assert.equal((await worker.evaluate(() => hostedCalls)).length, 0);
+    assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
+    await controls.locator('#settingsToggle').click();
+    assert.equal(await controls.getByRole('group', { name: 'AI access', exact: true }).locator('#hostedPanel').isVisible(), true);
     await controls.locator('#adultConsent').check();
     assert.equal(await controls.locator('#startTrial').isDisabled(), true);
     await controls.locator('#dataConsent').check();
@@ -230,12 +246,12 @@ test('subscription selection opens only hosted Stripe checkout, and restore vali
   try {
     await worker.evaluate(async () => { hostedMock.checkoutEnabled = true; await ClickItHosted.state(true); });
     await controls.evaluate(() => refresh());
+    await controls.locator('#settingsToggle').click();
     await controls.locator('#subscriptionPlan').selectOption('plus');
     await controls.locator('#buyCredits').click();
     await until(() => worker.evaluate(() => openedCheckouts.length === 1));
     assert.equal((await worker.evaluate(() => openedCheckouts))[0], 'https://checkout.stripe.com/c/pay_test');
     assert.equal((await worker.evaluate(() => hostedCalls.find(c => c.route === '/v1/checkout'))).body.planId, 'plus');
-    await controls.locator('#settingsToggle').click();
     await controls.locator('#accessRecovery summary').click();
     assert.equal(await controls.locator('#hostedAccessKey').inputValue(), token);
     await controls.locator('#restoreAccess').click();
@@ -252,6 +268,7 @@ test('subscription controls preview upgrades before charging and manage renewals
   });
   const controls = await popup();
   try {
+    await controls.locator('#settingsToggle').click();
     assert.equal(await controls.locator('#subscribeOptions').isHidden(), true);
     assert.match(await controls.locator('#creditBreakdown').textContent(), /200 monthly credits/);
     await controls.locator('#upgradePlan').click();
@@ -287,11 +304,13 @@ test('reopening the popup can retry a lost billing response using the original c
   });
   let controls=await popup();
   try{
+    await controls.locator('#settingsToggle').click();
     await controls.locator('#upgradePlan').click();await controls.locator('#upgradeQuote').waitFor({state:'visible'});
     await controls.locator('#confirmUpgrade').click();
     await until(async()=>(await controls.locator('#message').textContent()).includes('Billing response lost'));
     assert.equal(await controls.locator('#upgradeQuote').isVisible(), true);
     await controls.close();controls=await popup();
+    await controls.locator('#settingsToggle').click();
     await controls.locator('#retryBilling').waitFor({state:'visible'});
     await controls.locator('#retryBilling').click();
     await until(()=>controls.locator('#retryBilling').isHidden());

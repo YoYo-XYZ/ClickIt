@@ -432,10 +432,12 @@ test('AI access segments support keyboard switching and persist the selected bil
     await ownKey.focus();
     await controls.keyboard.press('ArrowLeft');
     assert.equal(await included.isChecked(), true);
+    assert.equal(await controls.locator('#hostedPanel').isVisible(), true);
     assert.equal(await controls.locator('#byokSettings').isHidden(), true);
     await controls.getByRole('button', { name: 'Save settings', exact: true }).click();
     await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
     assert.equal(await worker.evaluate(() => settings.billingMode), 'hosted');
+    assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
     await controls.reload();
     await controls.waitForFunction(() => !document.getElementById('saveSettings').disabled);
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -443,6 +445,7 @@ test('AI access segments support keyboard switching and persist the selected bil
     await included.focus();
     await controls.keyboard.press('ArrowRight');
     assert.equal(await ownKey.isChecked(), true);
+    assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
     await controls.locator('#byokSettings > summary').click();
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
     assert.equal(await controls.locator('#apiKey').inputValue(), 'fake-test-key');
