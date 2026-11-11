@@ -58,12 +58,12 @@
           <label class="mode-option"><input type="radio" name="billingMode" value="byok"><span>Your API key</span></label>
         </div>
       </fieldset>
-      <div id="byokSettings">
+      <details id="byokSettings" class="api-key-settings">
+      <summary>API Key</summary>
       <div class="api-credentials">
-        <label for="apiKey">API Key</label>
         <div class="api-credentials-controls">
           <select id="provider" aria-label="API provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select>
-          <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key">
+          <input id="apiKey" type="password" aria-label="API Key" autocomplete="off" placeholder="Paste your API key">
         </div>
       </div>
       <label class="consent"><input id="byokConsent" type="checkbox">I'm 18+ and use ClickIt where assistance is permitted. I agree to send quiz text or a visible-tab screenshot to my AI provider for an answer. Screenshots may contain personal information.</label>
@@ -72,7 +72,7 @@
         <p>Use ClickIt for casual quizzes where assistance is permitted. Text mode sends the question and choices. Vision mode sends the whole visible-tab screenshot, which may include personal information. Data goes directly to your selected provider, TypeSafe or OpenRouter, for TypeSafe's Jev model to suggest an answer. Your provider bills your account.</p>
         <p class="account-links"><a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Privacy and terms</a> · <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter privacy</a> · <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy</a></p>
       </details>
-      </div>
+      </details>
       <div class="prompt-field" id="promptSettings">
         <div class="prompt-heading"><label id="promptLabel" for="textPrompt">Text prompt</label><button id="resetPrompt" type="button">Reset</button></div>
         <textarea id="textPrompt" aria-label="Text prompt" rows="5" maxlength="6000"></textarea>
