@@ -34,3 +34,6 @@ ClickIt is a Chrome Manifest V3 extension that answers one visible single-choice
 - For Windows hotkey changes, run `npm run test:hotkey:windows`. For Worker changes, run `npm run check:worker`.
 - Edit source files, then use `npm run package:extension` when a build is needed. Never edit generated `dist/` files directly.
 - Use mocked provider responses for routine checks. Report what passed and any checks you could not run.
+
+## version managing
+- using **the same version for the same extension code** across GitHub and the Chrome Web Store.
