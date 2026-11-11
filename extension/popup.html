@@ -51,10 +51,21 @@
   </section>
   <section id="settingsPanel" hidden>
     <form id="settings">
-      <label>AI access<select id="billingMode"><option value="hosted">Included AI · credits</option><option value="byok">Advanced · your API key</option></select></label>
+      <fieldset id="billingMode" class="billing-mode">
+        <legend>AI access</legend>
+        <div class="billing-mode-options">
+          <label class="mode-option"><input type="radio" name="billingMode" value="hosted" checked><span>Included AI</span></label>
+          <label class="mode-option"><input type="radio" name="billingMode" value="byok"><span>Your API key</span></label>
+        </div>
+      </fieldset>
       <div id="byokSettings">
-      <label>API provider<select id="provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select></label>
-      <label><span id="keyLabel">TypeSafe API key</span><input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"></label>
+      <div class="api-credentials">
+        <label for="apiKey">API Key</label>
+        <div class="api-credentials-controls">
+          <select id="provider" aria-label="API provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select>
+          <input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key">
+        </div>
+      </div>
       <label class="consent"><input id="byokConsent" type="checkbox">I'm 18+ and use ClickIt where assistance is permitted. I agree to send quiz text or a visible-tab screenshot to my AI provider for an answer. Screenshots may contain personal information.</label>
       <details id="byokDisclosure" class="consent-details">
         <summary>Data sharing details</summary>

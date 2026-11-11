@@ -102,7 +102,7 @@ async function finish() { await until(() => worker.evaluate(() => jobs.size === 
 test('new hosted installations ask for consent and never send an API request just by opening the popup', async () => {
   const controls = await popup();
   try {
-    assert.equal(await controls.locator('#billingMode').inputValue(), 'hosted');
+    assert.equal(await controls.locator('input[name="billingMode"][value="hosted"]').isChecked(), true);
     assert.equal(await controls.locator('#startTrial').isDisabled(), true);
     assert.equal((await worker.evaluate(() => hostedCalls)).length, 0);
     await controls.locator('#adultConsent').check();

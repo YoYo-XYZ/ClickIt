@@ -42,6 +42,20 @@ body:has(#settingsPanel:not([hidden])) .mode-control, body:has(#settingsPanel:no
 #settingsToggle:hover, #settingsToggle[aria-expanded="true"] { border-color: #82bea9; color: #a8edcf; }
 form label { display: block; margin-bottom: 14px; color: #aab8c7; font-size: 12px; }
 form input, form select { display: block; width: 100%; margin-top: 7px; padding: 10px; border: 1px solid #35414f; border-radius: 8px; background: #17202a; color: #edf3f5; }
+.billing-mode { min-width: 0; margin: 0 0 14px; padding: 0; border: 0; }
+.billing-mode legend { margin-bottom: 7px; padding: 0; color: #aab8c7; font-size: 12px; }
+.billing-mode-options { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid #35414f; border-radius: 10px; background: #17202a; }
+.billing-mode .mode-option { min-width: 0; margin: 0; }
+.billing-mode input { width: 1px; margin: 0; padding: 0; border: 0; }
+.billing-mode .mode-option span { min-height: 34px; padding: 7px 8px; border-radius: 6px; }
+.billing-mode input:checked + span { background: #283d38; color: #bcf3dc; }
+.api-credentials { margin-bottom: 14px; }
+.api-credentials > label { margin-bottom: 7px; }
+.api-credentials-controls { display: grid; grid-template-columns: 112px minmax(0, 1fr); border: 1px solid #35414f; border-radius: 8px; background: #17202a; }
+.api-credentials-controls > select, .api-credentials-controls > input { min-width: 0; margin: 0; border: 0; background: transparent; }
+.api-credentials-controls > select { border-right: 1px solid #35414f; border-radius: 8px 0 0 8px; padding-left: 8px; padding-right: 4px; }
+.api-credentials-controls > input { border-radius: 0 8px 8px 0; }
+.api-credentials-controls > :focus-visible { outline-offset: -3px; }
 .prompt-field { margin-bottom: 16px; }
 .prompt-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }
 .prompt-heading label { margin: 0; }

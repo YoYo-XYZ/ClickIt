@@ -422,6 +422,34 @@ test('ungranted and restricted pages fail cleanly; page contexts cannot access s
   });
 });
 
+test('AI access segments support keyboard switching and persist the selected billing mode', async () => {
+  await configure();
+  const controls = await popup();
+  try {
+    await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+    const included = controls.getByRole('radio', { name: 'Included AI', exact: true });
+    const ownKey = controls.getByRole('radio', { name: 'Your API key', exact: true });
+    assert.equal(await ownKey.isChecked(), true);
+    await ownKey.focus();
+    await controls.keyboard.press('ArrowLeft');
+    assert.equal(await included.isChecked(), true);
+    assert.equal(await controls.locator('#byokSettings').isHidden(), true);
+    await controls.getByRole('button', { name: 'Save settings', exact: true }).click();
+    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    assert.equal(await worker.evaluate(() => settings.billingMode), 'hosted');
+    await controls.reload();
+    await controls.waitForFunction(() => !document.getElementById('saveSettings').disabled);
+    await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+    assert.equal(await included.isChecked(), true);
+    await included.focus();
+    await controls.keyboard.press('ArrowRight');
+    assert.equal(await ownKey.isChecked(), true);
+    assert.equal(await controls.locator('#apiKey').isVisible(), true);
+    assert.equal(await controls.locator('#apiKey').inputValue(), 'fake-test-key');
+    assert.equal((await calls()).length, 0);
+  } finally { await controls.close(); }
+});
+
 test('hotkey settings show actual assignments in both billing modes and open Chrome shortcut settings', async () => {
   await configure();
   const controls = await popup();
@@ -434,7 +462,7 @@ test('hotkey settings show actual assignments in both billing modes and open Chr
     for (const [mode, shortcut] of [['byok', 'Alt+Shift+Y'], ['hosted', '']]) {
       await controls.evaluate(shortcut => { testShortcut = shortcut; }, shortcut);
       await controls.locator('#settingsToggle').click();
-      await controls.locator('#billingMode').selectOption(mode);
+      await controls.locator(`input[name="billingMode"][value="${mode}"]`).check();
       await controls.waitForFunction(value => document.getElementById('hotkeyValue').textContent === value, shortcut || 'Not assigned');
       assert.equal(await controls.locator('#hotkeyValue').isVisible(), true);
       assert.equal(await controls.locator('#answerShortcut').isVisible(), false);
@@ -985,9 +1013,9 @@ test('prompts stay visible across billing modes; Reset restores only the selecte
       const key = `${mode}Prompt`, other = mode === 'text' ? 'visionPrompt' : 'textPrompt';
       assert.equal(await controls.locator(`#${key}`).isVisible(), true);
       assert.equal(await controls.locator(`#${other}`).isHidden(), true);
-      await controls.locator('#billingMode').selectOption(billingMode === 'byok' ? 'hosted' : 'byok');
+      await controls.locator(`input[name="billingMode"][value="${billingMode === 'byok' ? 'hosted' : 'byok'}"]`).check();
       assert.equal(await controls.locator(`#${key}`).isVisible(), true);
-      await controls.locator('#billingMode').selectOption(billingMode);
+      await controls.locator(`input[name="billingMode"][value="${billingMode}"]`).check();
       await controls.getByRole('button', { name: 'Reset', exact: true }).click();
       const expected = await worker.evaluate(key => C.defaults[key], key);
       assert.equal(await controls.locator(`#${key}`).inputValue(), expected);

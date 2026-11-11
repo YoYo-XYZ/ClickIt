@@ -10,6 +10,9 @@ function selectedMode() {
 function selectMode(value) {
   for (const input of document.querySelectorAll('input[name="mode"]')) input.checked = input.value === value;
 }
+function selectedBillingMode() {
+  return document.querySelector('input[name="billingMode"]:checked').value;
+}
 async function send(message) {
   const reply = await chrome.runtime.sendMessage(message);
   if (!reply?.ok) throw new Error(reply?.error || 'Extension unavailable.');
@@ -44,7 +47,7 @@ async function withAction(action) {
   } finally { sending = false; controls(); }
 }
 function showBilling() {
-  const byok = $('billingMode').value === 'byok';
+  const byok = selectedBillingMode() === 'byok';
   $('byokSettings').hidden = !byok;
   $('hostedPanel').hidden = byok;
 }
@@ -81,9 +84,6 @@ function showCredits() {
     'Choose Basic or Plus. Renews monthly until canceled. Monthly credits do not roll over.'
   ) : '10 free suggestions, then Basic $4.99/month or Plus $9.99/month. No card required to try.';
   $('creditError').textContent = hosted.error || (value?.billingSyncError ? 'Billing sync needs attention. Refresh later or contact support.' : !hosted.configured ? 'Hosted AI is not connected in this build. Advanced settings supports your own API key.' : '');
-}
-function showProvider() {
-  $('keyLabel').textContent = `${ClickIt.providers[$('provider').value].name} API key`;
 }
 function showPrompt() {
   const vision = selectedMode() === 'vision';
@@ -140,11 +140,13 @@ async function refresh(initial = false) {
       saved = data.settings;
       for (const key of Object.keys(ClickIt.defaults)) {
         if (key === 'mode') selectMode(data.settings.mode);
+        else if (key === 'billingMode') {
+          for (const input of document.querySelectorAll('input[name="billingMode"]')) input.checked = input.value === data.settings.billingMode;
+        }
         else if ($(key)?.type === 'checkbox') $(key).checked = data.settings[key];
         else if ($(key)) $(key).value = data.settings[key];
       }
       loaded = true;
-      showProvider();
       showPrompt();
       showBilling();
       $('hostedAccessKey').value = hosted?.credential || '';
@@ -152,7 +154,7 @@ async function refresh(initial = false) {
     controls();
   } catch (error) { $('message').textContent = error.message; }
 }
-$('provider').addEventListener('change', () => { $('byokConsent').checked = false; showProvider(); });
+$('provider').addEventListener('change', () => { $('byokConsent').checked = false; });
 $('billingMode').addEventListener('change', showBilling);
 async function saveMode() {
   while (selectedMode() !== saved.mode) {
@@ -179,7 +181,7 @@ $('settings').addEventListener('submit', async event => {
   event.preventDefault();
   await withAction(async () => {
     const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key,
-      key === 'mode' ? selectedMode() : $(key)?.type === 'checkbox' ? $(key).checked : ($(key)?.value ?? saved[key])])));
+      key === 'mode' ? selectedMode() : key === 'billingMode' ? selectedBillingMode() : $(key)?.type === 'checkbox' ? $(key).checked : ($(key)?.value ?? saved[key])])));
     await send({ type: 'save', settings });
     saved = settings;
     $('apiKey').value = settings.apiKey;
