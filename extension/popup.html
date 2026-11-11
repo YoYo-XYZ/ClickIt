@@ -55,8 +55,12 @@
       <div id="byokSettings">
       <label>API provider<select id="provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select></label>
       <label><span id="keyLabel">TypeSafe API key</span><input id="apiKey" type="password" autocomplete="off" placeholder="Paste your API key"></label>
-      <label class="consent"><input id="byokConsent" type="checkbox">I am 18 or older and use ClickIt for casual quizzes where assistance is permitted. I agree to send the question and choices in Text, or the whole visible-tab screenshot in Vision, directly to my selected provider, TypeSafe or OpenRouter, for TypeSafe's Jev model to suggest an answer. Screenshots may include personal information. My provider bills my account.</label>
-      <p class="account-links"><a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Privacy and terms</a> · <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter privacy</a> · <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy</a></p>
+      <label class="consent"><input id="byokConsent" type="checkbox">I'm 18+ and use ClickIt where assistance is permitted. I agree to send quiz text or a visible-tab screenshot to my AI provider for an answer. Screenshots may contain personal information.</label>
+      <details id="byokDisclosure" class="consent-details">
+        <summary>Data sharing details</summary>
+        <p>Use ClickIt for casual quizzes where assistance is permitted. Text mode sends the question and choices. Vision mode sends the whole visible-tab screenshot, which may include personal information. Data goes directly to your selected provider, TypeSafe or OpenRouter, for TypeSafe's Jev model to suggest an answer. Your provider bills your account.</p>
+        <p class="account-links"><a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Privacy and terms</a> · <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter privacy</a> · <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy</a></p>
+      </details>
       </div>
       <div class="prompt-field" id="promptSettings">
         <div class="prompt-heading"><label id="promptLabel" for="textPrompt">Text prompt</label><button id="resetPrompt" type="button">Reset</button></div>

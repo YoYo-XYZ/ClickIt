@@ -127,6 +127,15 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     await controls.locator('#byokConsent').waitFor({ state: 'visible' });
     assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
+    const disclosure = controls.locator('#byokDisclosure');
+    assert.equal(await disclosure.getAttribute('open'), null);
+    await disclosure.locator('summary').focus();
+    await controls.keyboard.press('Enter');
+    assert.equal(await disclosure.locator('p').first().isVisible(), true);
+    assert.equal(await disclosure.getByRole('link', { name: 'Privacy and terms' }).isVisible(), true);
+    assert.equal(await controls.locator('#byokConsent').isChecked(), false);
+    await controls.keyboard.press('Enter');
+    assert.equal(await disclosure.locator('p').first().isVisible(), false);
     await controls.locator('#byokConsent').check();
     await controls.locator('#saveSettings').click();
     await until(() => worker.evaluate(() => settings.byokConsent));
