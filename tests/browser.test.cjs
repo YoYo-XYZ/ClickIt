@@ -128,15 +128,13 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     await controls.locator('#byokConsent').waitFor({ state: 'visible' });
     assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
-    const disclosure = controls.locator('#byokDisclosure');
-    assert.equal(await disclosure.getAttribute('open'), null);
-    await disclosure.locator('summary').focus();
-    await controls.keyboard.press('Enter');
-    assert.equal(await disclosure.locator('p').first().isVisible(), true);
-    assert.equal(await disclosure.getByRole('link', { name: 'Privacy and terms' }).isVisible(), true);
-    assert.equal(await controls.locator('#byokConsent').isChecked(), false);
-    await controls.keyboard.press('Enter');
-    assert.equal(await disclosure.locator('p').first().isVisible(), false);
+    assert.equal(await controls.getByText('Data sharing details', { exact: true }).count(), 0);
+    const consent = controls.locator('label').filter({ has: controls.locator('#byokConsent') });
+    assert.match(await consent.textContent(), /question and choices in Text mode/);
+    assert.match(await consent.textContent(), /whole visible-tab screenshot in Vision mode/);
+    for (const name of ['Privacy and terms', 'OpenRouter privacy', 'TypeSafe privacy']) {
+      assert.equal(await controls.locator('#byokSettings').getByRole('link', { name, exact: true }).isVisible(), true);
+    }
     await controls.locator('#byokConsent').check();
     await controls.locator('#saveSettings').click();
     await until(() => worker.evaluate(() => settings.byokConsent));
@@ -465,9 +463,10 @@ test('API key settings collapse by default and toggle with the keyboard without 
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
     assert.equal(await controls.locator('#byokConsent').isChecked(), true);
-    assert.equal(await controls.locator('#byokDisclosure > summary').isVisible(), true);
+    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'Privacy and terms', exact: true }).isVisible(), true);
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), false);
+    assert.equal(await controls.locator('#byokSettings .provider-privacy').isVisible(), false);
     await controls.getByRole('button', { name: 'Save settings', exact: true }).click();
     await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
     assert.equal(await worker.evaluate(() => settings.apiKey), 'fake-test-key');
