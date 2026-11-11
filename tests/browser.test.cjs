@@ -130,9 +130,9 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
     assert.equal(await controls.getByText('Data sharing details', { exact: true }).count(), 0);
     const consent = controls.locator('label').filter({ has: controls.locator('#byokConsent') });
-    assert.match(await consent.textContent(), /question and choices in Text mode/);
-    assert.match(await consent.textContent(), /whole visible-tab screenshot in Vision mode/);
-    for (const name of ['Privacy and terms', 'OpenRouter privacy', 'TypeSafe privacy']) {
+    assert.match(await consent.textContent(), /I'm 18\+ and agree to the Privacy Policy and Terms\./);
+    assert.equal(await controls.locator('#byokDisclosure').count(), 0);
+    for (const name of ['Privacy Policy', 'Terms', 'OpenRouter privacy', 'TypeSafe privacy']) {
       assert.equal(await controls.locator('#byokSettings').getByRole('link', { name, exact: true }).isVisible(), true);
     }
     await controls.locator('#byokConsent').check();
@@ -466,7 +466,7 @@ test('API key settings collapse by default and toggle with the keyboard without 
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
     assert.equal(await controls.locator('#byokConsent').isChecked(), true);
-    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'Privacy and terms', exact: true }).isVisible(), true);
+    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'Privacy Policy', exact: true }).isVisible(), true);
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), false);
     assert.equal(await controls.locator('#byokSettings .provider-privacy').isVisible(), false);
