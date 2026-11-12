@@ -9,8 +9,8 @@
   --field: #19232e;
 }
 * { box-sizing: border-box; }
-html { width: 380px; }
-body { width: 100%; margin: 0; padding: 20px; }
+html { width: 300px; }
+body { width: 100%; margin: 0; padding: 16px; }
 button, input, select, textarea { font: inherit; }
 button, select, summary { cursor: pointer; }
 button { min-height: 36px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); color: #edf3f5; font-weight: 600; }

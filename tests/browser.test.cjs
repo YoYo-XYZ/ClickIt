@@ -49,13 +49,13 @@ async function until(check) {
 }
 async function popup() {
   const page = await context.newPage();
-  await page.setViewportSize({ width: 380, height: 520 });
+  await page.setViewportSize({ width: 300, height: 520 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
   return page;
 }
 
-test('toolbar popup opens at 380px without squeezing the shortcut', async () => {
+test('toolbar popup opens at 300px without squeezing the shortcut', async () => {
   await worker.evaluate(() => chrome.action.openPopup());
   const { targetInfos } = await browserSession.send('Target.getTargets');
   const target = targetInfos.find(target => target.url === `chrome-extension://${extensionId}/popup.html`);
@@ -84,7 +84,7 @@ test('toolbar popup opens at 380px without squeezing the shortcut', async () => 
       } })
     });
     const response = await result;
-    assert.deepEqual(response.result.result.value, { width: 380, overflow: false, shortcutWrap: 'nowrap' });
+    assert.deepEqual(response.result.result.value, { width: 300, overflow: false, shortcutWrap: 'nowrap' });
   } finally {
     await browserSession.send('Target.closeTarget', { targetId: target.targetId });
   }

@@ -80,7 +80,7 @@ after(async () => {
 });
 async function popup() {
   const page = await context.newPage();
-  await page.setViewportSize({ width: 380, height: 900 });
+  await page.setViewportSize({ width: 300, height: 900 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
   return page;
@@ -362,7 +362,7 @@ test('credit and payment states stay actionable at narrow widths and enlarged te
         assert.match(await controls.locator('#manageSubscription').textContent(), /Resolve payment/);
         assert.equal(await controls.locator('#manageSubscription').evaluate(node => node.classList.contains('primary')), true);
       }
-      for (const width of [380, 420]) {
+      for (const width of [300, 340]) {
         await controls.setViewportSize({ width, height: 600 });
         assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${state.name}: ${width}`);
       }

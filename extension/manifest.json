@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Clickit",
-  "version": "2.1.4",
+  "version": "2.1.6",
   "description": "Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["https://api.typesafe.ai/*", "https://openrouter.ai/*"],
