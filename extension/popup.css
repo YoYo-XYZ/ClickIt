@@ -61,7 +61,9 @@ body:has(#settingsPanel:not([hidden])) #answerPanel, body:has(#settingsPanel:not
 legend, .field-label, .prompt-heading label, #apiKeyHeading { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
 #hostedPanel { margin-top: 18px; }
 .prompt-heading, .hotkey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-#creditBalance { margin: 16px 0 8px; font-size: 12px; color: var(--muted); }
+.credit-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 8px; }
+#creditBalance { font-size: 12px; color: var(--muted); }
+#manageSubscription { margin-left: auto; text-align: right; font-weight: normal; text-decoration: underline; text-underline-offset: 3px; }
 #resetPrompt, button.text-button { min-height: 32px; padding: 5px 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; }
 #resetPrompt:hover:not(:disabled), button.text-button:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 #creditNote { margin: 8px 0 14px; color: var(--muted); font-size: 12px; }

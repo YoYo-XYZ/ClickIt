@@ -45,11 +45,13 @@
             <label class="consent"><input id="dataConsent" type="checkbox">I consent to sharing quiz text or visible-tab screenshots with Clickit, OpenRouter and TypeSafe for answers. They may contain personal data.</label>
             <button id="startTrial" class="primary" type="button">Try 15 free answers</button>
           </div>
-          <p id="creditBalance" role="status">15 free answers</p>
+          <div class="credit-summary">
+            <p id="creditBalance" role="status">15 free answers</p>
+            <button id="manageSubscription" class="text-button" type="button" hidden>Manage billing</button>
+          </div>
           <div id="subscribeOptions" hidden><select id="subscriptionPlan" aria-label="Monthly plan in USD"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" class="primary" type="button">Continue to checkout</button></div>
           <div id="subscriptionActions" hidden>
             <button id="upgradePlan" type="button" hidden>Upgrade to Plus</button>
-            <button id="manageSubscription" type="button">Manage billing</button>
             <button id="downgradePlan" class="text-button" type="button" hidden>Switch to Basic at renewal</button>
             <button id="keepPlan" class="text-button" type="button" hidden>Keep current plan</button>
             <button id="cancelSubscription" class="text-button" type="button" hidden>Cancel renewal</button>

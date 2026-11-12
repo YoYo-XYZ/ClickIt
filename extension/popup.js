@@ -85,6 +85,7 @@ function showCredits() {
   $('startTrial').textContent = hosted.registered ? 'Accept and continue' : 'Try 15 free answers';
   $('subscribeOptions').hidden = !hosted.registered || !hosted.consented || !value || live;
   $('subscriptionActions').hidden = !$('upgradeQuote').hidden || !hosted.registered || (!live && !value?.billingManagementAvailable);
+  $('manageSubscription').hidden = $('subscriptionActions').hidden;
   $('upgradePlan').hidden = !live || sub.planId !== 'basic' || sub.status !== 'active' || sub.cancelAtPeriodEnd || paymentDue;
   $('downgradePlan').hidden = !live || sub.planId !== 'plus' || sub.status !== 'active' || sub.cancelAtPeriodEnd || paymentDue || Boolean(sub.scheduledPlan);
   $('keepPlan').hidden = !live || !sub.scheduledPlan;
@@ -107,7 +108,6 @@ function showCredits() {
   ) : 'No card required. No automatic subscription.';
   $('creditNote').classList.toggle('attention', paymentDue);
   $('manageSubscription').textContent = paymentDue ? 'Resolve payment on Stripe' : 'Manage billing';
-  $('manageSubscription').classList.toggle('primary', paymentDue);
   setText('creditError', hosted.error || (value?.billingSyncError ? 'Billing could not sync. Reopen the popup or contact support.' : ''));
   const ownKey = saved?.billingMode === 'byok';
   $('accountSummary').textContent = ownKey ? 'Using your API key' : $('creditBalance').textContent;

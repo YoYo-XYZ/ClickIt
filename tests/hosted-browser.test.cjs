@@ -293,6 +293,12 @@ test('subscription controls preview upgrades before charging and manage renewals
     await controls.evaluate(() => refresh());
     assert.equal(await controls.locator('#downgradePlan').isDisabled(), true);
     assert.equal(await controls.locator('#manageSubscription').isDisabled(), false);
+    assert.equal(await controls.locator('#manageSubscription').evaluate(button => {
+      const balance = document.getElementById('creditBalance').getBoundingClientRect();
+      const link = button.getBoundingClientRect();
+      return button.classList.contains('text-button') && link.left >= balance.right &&
+        Math.abs((link.top + link.height / 2) - (balance.top + balance.height / 2)) < 1;
+    }), true);
     await controls.locator('#manageSubscription').click();
     await until(() => worker.evaluate(() => openedCheckouts.includes('https://billing.stripe.com/p/session_test')));
     await controls.locator('#cancelSubscription').click();
