@@ -83,7 +83,6 @@ function showCredits() {
   $('retryBilling').hidden = !hosted.billingOperationPending;
   $('trialConsent').hidden = hosted.registered && hosted.consented;
   $('startTrial').textContent = hosted.registered ? 'Accept and continue' : 'Try 15 free answers';
-  $('refreshBalance').hidden = !hosted.registered;
   $('subscribeOptions').hidden = !hosted.registered || !hosted.consented || !value || live;
   $('subscriptionActions').hidden = !$('upgradeQuote').hidden || !hosted.registered || (!live && !value?.billingManagementAvailable);
   $('upgradePlan').hidden = !live || sub.planId !== 'basic' || sub.status !== 'active' || sub.cancelAtPeriodEnd || paymentDue;
@@ -95,21 +94,21 @@ function showCredits() {
   const date = sub ? new Date(sub.periodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const planName = sub?.planId === 'plus' ? 'Plus' : 'Basic';
   $('creditNote').textContent = hosted.registered ? (
-    hosted.pending ? 'Credits are syncing. Refresh to check again.' :
+    hosted.pending ? 'Credits are syncing. Reopen the popup to check again.' :
     value?.reserved ? `${value.reserved} credit reserved for an active request.` :
     sub?.pendingUpgrade ? 'Upgrade awaiting payment. Finish payment on Stripe to receive the extra credits.' :
     sub?.paymentActionRequired ? 'Payment needs attention. Update your payment on Stripe to receive monthly credits.' :
     live && sub.cancelAtPeriodEnd ? `Automatic renewal is off. ${planName} and remaining monthly credits end ${date}.` :
     live && sub.scheduledPlan ? `${planName} renews on Basic for $4.99/month on ${date}. Current monthly credits expire then.` :
     live ? `${planName} · US$${sub.planId === 'plus' ? '9.99' : '4.99'}/month. Renews ${date}. ${value.monthlyCredits === 0 ? 'Your monthly credits refill then.' : 'Unused monthly credits expire then.'}` :
-    !value ? 'Refresh to check your credits and plan.' :
+    !value ? 'Reopen the popup to check your credits and plan.' :
     !value.checkoutEnabled ? 'Subscriptions are currently unavailable. Your credits are preserved.' :
     value.credits === 0 ? 'Choose a plan to continue.' : ''
   ) : 'No card required. No automatic subscription.';
   $('creditNote').classList.toggle('attention', paymentDue);
   $('manageSubscription').textContent = paymentDue ? 'Resolve payment on Stripe' : 'Manage billing';
   $('manageSubscription').classList.toggle('primary', paymentDue);
-  setText('creditError', hosted.error || (value?.billingSyncError ? 'Billing could not sync. Refresh or contact support.' : ''));
+  setText('creditError', hosted.error || (value?.billingSyncError ? 'Billing could not sync. Reopen the popup or contact support.' : ''));
   const ownKey = saved?.billingMode === 'byok';
   $('accountSummary').textContent = ownKey ? 'Using your API key' : $('creditBalance').textContent;
   $('accountAction').textContent = ownKey ? 'Settings →' : !hosted.registered || !hosted.consented ? 'Get started →' : paymentDue ? 'Fix payment →' : live ? 'Manage plan →' : 'View plans →';
@@ -279,12 +278,11 @@ function accountAction(message) {
     }
     if (message.type === 'startTrial') showSettings(false);
     if (message.type === 'retryBilling') { $('upgradeQuote').hidden = true; upgradeQuote = null; showCredits(); }
-    const notices = { checkout: 'Checkout opened on Stripe. Return here after payment.', billingPortal: 'Billing opened on Stripe. Return here when finished.', refreshBalance: 'Balance updated.' };
+    const notices = { checkout: 'Checkout opened on Stripe. Return here after payment.', billingPortal: 'Billing opened on Stripe. Return here when finished.' };
     if (notices[message.type]) notice(notices[message.type]);
   });
 }
 $('startTrial').addEventListener('click', () => accountAction({ type: 'startTrial', adultConsent: $('adultConsent').checked, dataConsent: $('dataConsent').checked }));
-$('refreshBalance').addEventListener('click', () => accountAction({ type: 'refreshBalance' }));
 $('buyCredits').addEventListener('click', () => accountAction({ type: 'checkout', planId: $('subscriptionPlan').value }));
 $('manageSubscription').addEventListener('click', () => accountAction({ type: 'billingPortal' }));
 $('retryBilling').addEventListener('click', () => accountAction({ type: 'retryBilling' }));

@@ -380,7 +380,7 @@ test('checkout failures clear pending feedback and do not allow duplicate checko
   } finally { await controls.close(); }
 });
 
-test('unavailable balances retain Refresh without offering another subscription', async () => {
+test('unavailable balances show their status without offering another subscription', async () => {
   const controls = await popup();
   try {
     await controls.locator('#accountEntry').click();
@@ -400,9 +400,10 @@ test('unavailable balances retain Refresh without offering another subscription'
     assert.equal(await controls.locator('#creditBalance').textContent(), 'Balance unavailable');
     assert.equal(await controls.locator('#subscribeOptions').isHidden(), true);
     assert.match(await controls.locator('#creditError').textContent(), /Offline/);
-    assert.equal(await controls.locator('#refreshBalance').isEnabled(), true);
-    await controls.evaluate(() => { balanceUnavailable = false; });
-    await controls.locator('#refreshBalance').click();
+    assert.equal(await controls.locator('#refreshBalance').count(), 0);
+    assert.equal(await controls.locator('.credit-heading').count(), 0);
+    assert.equal(await controls.locator('#creditBalance').isVisible(), true);
+    await controls.evaluate(() => { balanceUnavailable = false; return refresh(); });
     await until(async () => (await controls.locator('#creditBalance').textContent()).includes('credits left'));
   } finally { await controls.close(); }
 });

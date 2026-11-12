@@ -58,19 +58,17 @@ body:has(#settingsPanel:not([hidden])) #answerPanel, body:has(#settingsPanel:not
 #message.error { border-color: #f2a89f; color: #ffd1cb; }
 #message:empty, #creditNote:empty, #creditError:empty, #hotkeyError:empty, #timing:empty { display: none; }
 .billing-mode { min-width: 0; margin: 0; padding: 0; border: 0; }
-legend, .field-label, .prompt-heading label, #subscribeOptions > label, #apiKeyHeading { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+legend, .field-label, .prompt-heading label, #apiKeyHeading { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
 #hostedPanel { margin-top: 18px; }
-.credit-heading, .prompt-heading, .hotkey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.credit-heading { flex-wrap: wrap; gap: 4px 12px; }
-#creditBalance { font-size: 20px; font-weight: 650; letter-spacing: -.4px; }
-#refreshBalance, #resetPrompt, button.text-button { min-height: 32px; padding: 5px 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; }
-#refreshBalance:hover:not(:disabled), #resetPrompt:hover:not(:disabled), button.text-button:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.prompt-heading, .hotkey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#creditBalance { margin: 16px 0 8px; font-size: 12px; color: var(--muted); }
+#resetPrompt, button.text-button { min-height: 32px; padding: 5px 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; }
+#resetPrompt:hover:not(:disabled), button.text-button:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 #creditNote { margin: 8px 0 14px; color: var(--muted); font-size: 12px; }
 #creditNote.attention { color: #f3c98d; }
 .consent { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .consent input { flex: 0 0 auto; width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); }
 #startTrial, #buyCredits { width: 100%; margin-top: 4px; }
-#subscribeOptions label { display: block; margin-top: 16px; }
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); color: #edf3f5; }
 #subscriptionPlan, #provider { padding-inline: 6px; font-size: 12px; }
 #subscriptionPlan { margin-bottom: 8px; }
