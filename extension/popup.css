@@ -58,7 +58,7 @@ fieldset:disabled .mode-option { cursor: default; opacity: .55; }
 body:has(#settingsPanel:not([hidden])) #answerPanel, body:has(#settingsPanel:not([hidden])) .shortcut-hint { display: none; }
 #message { margin-bottom: 16px; padding: 10px 12px; border-left: 2px solid var(--accent); background: var(--field); overflow-wrap: anywhere; }
 #message.error { border-color: #f2a89f; color: #ffd1cb; }
-#message:empty, #creditNote:empty, #creditError:empty, #billingNotice:empty, #hotkeyError:empty, #timing:empty { display: none; }
+#message:empty, #creditNote:empty, #creditError:empty, #hotkeyError:empty, #timing:empty { display: none; }
 .billing-mode { min-width: 0; margin: 0; padding: 0; border: 0; }
 legend, .field-label, .prompt-heading label, #subscribeOptions > label { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
 #hostedPanel { margin-top: 18px; }
@@ -84,7 +84,6 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { width: 100%
 #upgradeQuote .text-button { justify-self: start; }
 #retryBilling { width: 100%; margin-top: 12px; }
 #creditError { color: #ffd1cb; font-size: 12px; margin-top: 10px; overflow-wrap: anywhere; }
-#billingNotice { font-size: 12px; margin-top: 10px; color: var(--accent); }
 .account-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; font-size: 12px; }
 details > summary { padding-block: 12px; font-size: 13px; color: #edf3f5; }
 details[open] > summary { margin-bottom: 4px; }

@@ -294,7 +294,7 @@ export function billingService({ env, fetchImpl, now, fail }) {
         mode: 'subscription', customer: account.customer_id, client_reference_id: owner,
         'metadata[clickit_checkout]': attempt, 'subscription_data[metadata][clickit_installation]': owner,
         'line_items[0][price]': prices[plan.id], 'line_items[0][quantity]': '1',
-        success_url: `${publicUrl()}/purchase.html?checkout=complete`, cancel_url: `${publicUrl()}/purchase.html?cancelled=1`,
+        success_url: `${publicUrl()}/purchase.html`, cancel_url: `${publicUrl()}/purchase.html?cancelled=1`,
         'custom_text[submit][message]': `Renews monthly until canceled. Monthly credits expire at renewal. See [terms and refunds](${publicUrl()}/terms.html) and [privacy](${publicUrl()}/privacy.html).`,
         'automatic_tax[enabled]': 'false'
       }, `subscription-checkout:${attempt}`);
@@ -401,7 +401,7 @@ export function billingService({ env, fetchImpl, now, fail }) {
         !configuration.features?.subscription_cancel?.enabled || configuration.features.subscription_cancel.mode !== 'at_period_end' ||
         !configuration.features?.payment_method_update?.enabled || !configuration.features?.invoice_history?.enabled) fail(503, 'Billing management settings need attention. Contact support.');
       const session = await stripe('billing_portal/sessions', { customer: account.customer_id,
-        configuration: env.STRIPE_PORTAL_CONFIGURATION_ID, return_url: `${publicUrl()}/purchase.html?billing=return` });
+        configuration: env.STRIPE_PORTAL_CONFIGURATION_ID, return_url: `${publicUrl()}/purchase.html` });
       if (new URL(session.url).origin !== 'https://billing.stripe.com') fail(502, 'Unexpected billing URL.');
       return { url: session.url };
     });

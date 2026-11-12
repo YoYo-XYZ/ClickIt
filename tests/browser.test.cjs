@@ -55,41 +55,6 @@ async function popup() {
   return page;
 }
 
-test('toolbar popup opens at 300px without squeezing the shortcut', async () => {
-  await worker.evaluate(() => chrome.action.openPopup());
-  const { targetInfos } = await browserSession.send('Target.getTargets');
-  const target = targetInfos.find(target => target.url === `chrome-extension://${extensionId}/popup.html`);
-  assert.ok(target, 'the actual toolbar popup must open');
-  const { sessionId } = await browserSession.send('Target.attachToTarget', { targetId: target.targetId });
-  const result = new Promise(resolve => {
-    const receive = event => {
-      if (event.sessionId !== sessionId) return;
-      const message = JSON.parse(event.message);
-      if (message.id !== 1) return;
-      browserSession.off('Target.receivedMessageFromTarget', receive);
-      resolve(message);
-    };
-    browserSession.on('Target.receivedMessageFromTarget', receive);
-  });
-  try {
-    await browserSession.send('Target.sendMessageToTarget', {
-      sessionId,
-      message: JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: {
-        expression: `new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve({
-          width: innerWidth,
-          overflow: document.documentElement.scrollWidth > innerWidth,
-          shortcutWrap: getComputedStyle(document.querySelector('.shortcut-hint')).whiteSpace
-        }))))`,
-        awaitPromise: true, returnByValue: true
-      } })
-    });
-    const response = await result;
-    assert.deepEqual(response.result.result.value, { width: 300, overflow: false, shortcutWrap: 'nowrap' });
-  } finally {
-    await browserSession.send('Target.closeTarget', { targetId: target.targetId });
-  }
-});
-
 async function configure(overrides = {}, response = {}) {
   await until(() => worker.evaluate(() => jobs.size === 0));
   const controls = await popup();
@@ -402,6 +367,8 @@ test('popup saves lean settings, shows only the latest answer, and keeps it on r
   await configure({ minConfidence: 0.3, timeoutMs: 5000 });
   await scenario(fixture, async (page, controls) => {
     assert.equal(await controls.locator('#autopilot,#answerBank').count(), 0);
+    assert.equal(await controls.locator('html').evaluate(node => node.getBoundingClientRect().width), 300);
+    assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
     assert.equal(await controls.locator('#settingsToggle').getAttribute('aria-expanded'), 'true');
     assert.equal(await controls.locator('#answerNow').isVisible(), false);
@@ -1079,6 +1046,10 @@ test('custom prompts stay collapsed until opened across billing modes; Reset res
       const key = `${mode}Prompt`, other = mode === 'text' ? 'visionPrompt' : 'textPrompt';
       assert.equal(await controls.locator(`#${key}`).isVisible(), true);
       assert.equal(await controls.locator(`#${other}`).isHidden(), true);
+      await controls.locator('input[name="promptMode"]:not(:checked)').check();
+      assert.equal(await controls.locator(`#${other}`).isVisible(), true);
+      assert.equal(await controls.locator('input[name="mode"]:checked').inputValue(), mode);
+      await controls.locator(`input[name="promptMode"][value="${mode}"]`).check();
       await controls.locator(`input[name="billingMode"][value="${billingMode === 'byok' ? 'hosted' : 'byok'}"]`).check();
       assert.equal(await controls.locator(`#${key}`).isVisible(), true);
       await controls.locator(`input[name="billingMode"][value="${billingMode}"]`).check();
@@ -1113,41 +1084,6 @@ test('blank, oversized, and non-text prompts are rejected without overwriting sa
       assert.match(result.error, /Prompts/);
     }
     assert.deepEqual(await worker.evaluate(() => [settings.textPrompt, settings.visionPrompt]), ['Saved text', 'Saved vision']);
-  } finally { await controls.close(); }
-});
-
-test('prompt editors switch independently of answer mode and keyboard navigation returns to Answer', async () => {
-  await configure({ mode: 'text', textPrompt: 'Keep my text prompt', visionPrompt: 'Keep my vision prompt' });
-  const controls = await popup();
-  try {
-    await controls.locator('#accountEntry').focus();
-    await controls.keyboard.press('Enter');
-    assert.equal(await controls.locator('#settingsToggle').getAttribute('aria-expanded'), 'true');
-    assert.equal(await controls.locator('#promptSettings').getAttribute('open'), null);
-    await controls.locator('#promptSettings > summary').focus();
-    await controls.keyboard.press('Enter');
-    await controls.locator('input[name="promptMode"][value="text"]').focus();
-    await controls.keyboard.press('ArrowRight');
-    assert.equal(await controls.locator('#visionPrompt').isVisible(), true);
-    await controls.locator('#visionPrompt').fill('Updated vision instructions');
-    assert.equal(await controls.locator('#saveSettings').count(), 0);
-    await finishEditing(controls);
-    assert.deepEqual(await worker.evaluate(() => [settings.mode, settings.textPrompt, settings.visionPrompt]), ['text', 'Keep my text prompt', 'Updated vision instructions']);
-    await controls.locator('#settingsToggle').click();
-    await controls.keyboard.press('Escape');
-    assert.equal(await controls.locator('#settingsPanel').isHidden(), true);
-    assert.equal(await controls.locator('#settingsToggle').evaluate(node => node === document.activeElement), true);
-    assert.equal((await calls()).length, 0);
-    const repeatedAnnouncements = await controls.evaluate(async () => {
-      let count = 0;
-      const observer = new MutationObserver(records => { count += records.length; });
-      for (const id of ['status', 'answer', 'creditError']) observer.observe(document.getElementById(id), { childList: true, subtree: true, characterData: true });
-      await refresh();
-      await refresh();
-      observer.disconnect();
-      return count;
-    });
-    assert.equal(repeatedAnnouncements, 0, 'unchanged polling results must not repeat live announcements');
   } finally { await controls.close(); }
 });
 

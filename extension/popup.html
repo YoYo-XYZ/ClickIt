@@ -7,7 +7,7 @@
     <p id="answerShortcut" class="shortcut-hint"></p>
     <button id="settingsToggle" type="button" aria-label="Settings" title="Settings" aria-controls="settingsPanel" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
   </header>
-  <p id="message" role="status" tabindex="-1"></p>
+  <p id="message" role="status"></p>
   <main id="answerPanel">
   <fieldset id="mode" class="mode-control" aria-label="Read question using" disabled>
     <label class="mode-option">
@@ -40,7 +40,7 @@
           <label class="mode-option"><input type="radio" name="billingMode" value="byok"><span>Your API key</span></label>
         </div>
         <section id="hostedPanel" aria-label="AI credits">
-          <div class="credit-heading"><strong id="creditBalance"><span class="trial-highlight">15 free</span> answers</strong><button id="refreshBalance" type="button">Refresh</button></div>
+          <div class="credit-heading"><strong id="creditBalance">15 free answers</strong><button id="refreshBalance" type="button">Refresh</button></div>
           <p id="creditBreakdown" hidden></p>
           <p id="creditNote">No card required. No automatic subscription.</p>
           <div id="trialConsent">
@@ -57,28 +57,25 @@
             <button id="cancelSubscription" class="text-button" type="button" hidden>Cancel renewal</button>
             <button id="resumeSubscription" class="text-button" type="button" hidden>Resume renewal</button>
           </div>
-          <section id="upgradeQuote" aria-label="Review upgrade" hidden><h2>Upgrade to Plus</h2><p id="upgradeQuoteText" role="status"></p><p id="upgradeExpiry" class="hint" role="status"></p><button id="confirmUpgrade" class="primary" type="button">Confirm upgrade</button><button id="dismissUpgrade" class="text-button" type="button">Back</button></section>
+          <section id="upgradeQuote" aria-label="Review upgrade" hidden><h2>Upgrade to Plus</h2><p id="upgradeQuoteText" role="status"></p><button id="confirmUpgrade" class="primary" type="button">Confirm upgrade</button><button id="dismissUpgrade" class="text-button" type="button">Back</button></section>
           <button id="retryBilling" type="button" hidden>Retry billing update</button>
-          <p id="billingNotice" role="status"></p>
           <p id="creditError" role="alert"></p>
           <p class="account-links"><a id="privacyLink" target="_blank" rel="noreferrer" hidden>Privacy</a><a id="termsLink" target="_blank" rel="noreferrer" hidden>Terms</a><a id="supportLink" target="_blank" rel="noreferrer">Support</a></p>
         </section>
       </fieldset>
       <details id="byokSettings" class="api-key-settings">
       <summary>API key</summary>
-      <div class="api-credentials">
         <div class="api-credentials-controls">
           <select id="provider" aria-label="API provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select>
           <input id="apiKey" type="password" aria-label="API Key" autocomplete="off" placeholder="Paste your API key">
         </div>
-      </div>
       <label class="consent"><input id="byokConsent" type="checkbox"><span>I'm 18+ and accept the <a href="https://clickit.thammatorn-clickit.workers.dev/terms.html" target="_blank" rel="noreferrer">Terms</a>. See the <a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Clickit</a>, <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter</a>, and <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy policies</a>.</span></label>
       </details>
       <section class="hotkey-settings" aria-labelledby="hotkeyLabel">
         <div class="hotkey-heading"><span id="hotkeyLabel">Answer hotkey</span><button id="changeShortcut" type="button" aria-label="Change answer hotkey" aria-describedby="hotkeyValue" title="Change shortcut"><kbd id="hotkeyValue">Loading…</kbd></button></div>
         <p id="hotkeyError" role="status"></p>
       </section>
-      <details id="promptSettings" class="prompt-settings">
+      <details id="promptSettings">
       <summary>Custom prompts</summary>
       <fieldset id="promptMode" class="segmented" aria-label="Edit prompt for"><label class="mode-option"><input type="radio" name="promptMode" value="text" checked><span>Text</span></label><label class="mode-option"><input type="radio" name="promptMode" value="vision"><span>Vision</span></label></fieldset>
       <div class="prompt-field">

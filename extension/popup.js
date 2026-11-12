@@ -48,7 +48,6 @@ function controls() {
   if (upgradeQuote) {
     const expired = Date.now() >= upgradeQuote.expiresAt;
     $('confirmUpgrade').textContent = expired ? 'Get a new quote' : upgradeQuote.confirmLabel;
-    setText('upgradeExpiry', expired ? 'Quote expired. Get a new quote to continue.' : `Quote valid until ${new Date(upgradeQuote.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}.`);
   }
 }
 async function withAction(action) {
@@ -61,7 +60,6 @@ async function withAction(action) {
     await action();
     return true;
   } catch (error) {
-    $('billingNotice').textContent = '';
     notice(error.message, true);
     return false;
   } finally {
@@ -83,13 +81,12 @@ function showCredits() {
   const sub = value?.subscription;
   const live = sub && !['canceled', 'incomplete_expired'].includes(sub.status);
   const paymentDue = Boolean(sub?.pendingUpgrade || sub?.paymentActionRequired);
-  const reviewing = !$('upgradeQuote').hidden;
   $('retryBilling').hidden = !hosted.billingOperationPending;
   $('trialConsent').hidden = !hosted.configured || (hosted.registered && hosted.consented);
   $('startTrial').textContent = hosted.registered ? 'Accept and continue' : 'Try 15 free answers';
   $('refreshBalance').hidden = !hosted.registered;
   $('subscribeOptions').hidden = !hosted.registered || !hosted.consented || !value || live;
-  $('subscriptionActions').hidden = reviewing || !hosted.registered || (!live && !value?.billingManagementAvailable);
+  $('subscriptionActions').hidden = !$('upgradeQuote').hidden || !hosted.registered || (!live && !value?.billingManagementAvailable);
   $('upgradePlan').hidden = !live || sub.planId !== 'basic' || sub.status !== 'active' || sub.cancelAtPeriodEnd || paymentDue;
   $('downgradePlan').hidden = !live || sub.planId !== 'plus' || sub.status !== 'active' || sub.cancelAtPeriodEnd || paymentDue || Boolean(sub.scheduledPlan);
   $('keepPlan').hidden = !live || !sub.scheduledPlan;
@@ -170,7 +167,6 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !$('settingsPanel').hidden) {
     event.preventDefault();
     showSettings(false);
-    $('settingsToggle').focus();
   }
 });
 async function refresh(initial = false) {
@@ -178,7 +174,6 @@ async function refresh(initial = false) {
     const data = await send({ type: 'inspect', opened: initial });
     running = data.busy;
     hosted = data.hosted;
-    showCredits();
     $('status').closest('.status').dataset.kind = data.status.kind || '';
     $('status').setAttribute('role', data.status.kind === 'error' ? 'alert' : 'status');
     setText('status', data.status.text);
@@ -200,14 +195,13 @@ async function refresh(initial = false) {
       showPrompt();
       showBilling();
       $('hostedAccessKey').value = hosted?.credential || '';
-      showCredits();
     }
+    showCredits();
     controls();
   } catch (error) { notice(error.message, true); }
 }
 $('provider').addEventListener('change', () => { $('byokConsent').checked = false; });
 $('billingMode').addEventListener('change', showBilling);
-$('settings').addEventListener('input', controls);
 async function saveMode() {
   await settingsSave;
   while (selectedMode() !== saved.mode) {
@@ -273,7 +267,7 @@ $('answerNow').addEventListener('click', async () => {
 for (const id of ['adultConsent', 'dataConsent']) $(id).addEventListener('change', controls);
 function accountAction(message) {
   return withAction(async () => {
-    $('billingNotice').textContent = message.type === 'checkout' ? 'Opening secure checkout…' : message.type === 'billingPortal' ? 'Opening Stripe billing…' : '';
+    notice(message.type === 'checkout' ? 'Opening secure checkout…' : message.type === 'billingPortal' ? 'Opening Stripe billing…' : '');
     await send(message);
     if (message.type === 'startTrial' && saved.billingMode !== 'hosted') {
       const next = { ...saved, billingMode: 'hosted' };
@@ -291,7 +285,7 @@ function accountAction(message) {
     if (message.type === 'startTrial') { showSettings(false); notice('Ready. Press Answer on your quiz.'); }
     if (message.type === 'retryBilling') { $('upgradeQuote').hidden = true; upgradeQuote = null; showCredits(); }
     const notices = { checkout: 'Checkout opened on Stripe. Return here after payment.', billingPortal: 'Billing opened on Stripe. Return here when finished.', refreshBalance: 'Balance updated.' };
-    $('billingNotice').textContent = notices[message.type] || '';
+    if (notices[message.type]) notice(notices[message.type]);
   });
 }
 $('startTrial').addEventListener('click', () => accountAction({ type: 'startTrial', adultConsent: $('adultConsent').checked, dataConsent: $('dataConsent').checked }));
@@ -306,7 +300,7 @@ async function previewUpgrade() {
   upgradeQuote = await send({ type: 'previewUpgrade' });
   const price = new Intl.NumberFormat(undefined, { style: 'currency', currency: upgradeQuote.currency }).format(upgradeQuote.amount / 100);
   upgradeQuote.confirmLabel = `Pay ${price} and upgrade`;
-  $('upgradeQuoteText').textContent = `${price} due now\n+${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}\nThen US$9.99/month at renewal.`;
+  $('upgradeQuoteText').textContent = `${price} due now\n+${upgradeQuote.additionalCredits} credits until ${new Date(upgradeQuote.periodEnd * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}\nThen US$9.99/month at renewal. Quote valid for five minutes.`;
   $('upgradeQuote').hidden = false;
   showCredits();
   focusAfterAction = $('confirmUpgrade');

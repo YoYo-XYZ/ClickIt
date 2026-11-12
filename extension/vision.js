@@ -148,7 +148,7 @@
         * { box-sizing:border-box; pointer-events:none; }
         .area { position:absolute; border:3px solid #ffdf00; box-shadow:0 0 0 2px #111; }
         .marker { position:absolute; width:18px; height:18px; transform:translate(-50%,-50%); border:3px solid #ffdf00; border-radius:50%; box-shadow:0 0 0 2px #111; }
-        .hint { position:absolute; max-width:calc(100vw - 16px); padding:6px 10px; background:#111; color:#fff; font:13px/20px system-ui,sans-serif; border-radius:4px; }
+        .hint { position:absolute; max-width:calc(100vw - 16px); padding:6px 10px; background:#111; color:#fff; font:14px/20px Arial,sans-serif; border-radius:4px; }
       `;
       const area = document.createElement('div');
       area.className = 'area';
@@ -159,7 +159,7 @@
       const hint = document.createElement('div');
       hint.className = 'hint';
       hint.setAttribute('role', 'status');
-      hint.textContent = 'Click the highlighted answer';
+      hint.textContent = 'Click the highlighted answer manually';
       hint.style.cssText = `left:${Math.max(8, Math.min(rect.x, innerWidth - 300))}px;top:${rect.y >= 44 ? rect.y - 40 : Math.min(innerHeight - 44, rect.y + rect.height + 8)}px;`;
       shadow.append(style, area, marker, hint);
       (document.fullscreenElement || document.documentElement).append(highlight);
