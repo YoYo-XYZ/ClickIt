@@ -49,11 +49,47 @@ async function until(check) {
 }
 async function popup() {
   const page = await context.newPage();
-  await page.setViewportSize({ width: 360, height: 520 });
+  await page.setViewportSize({ width: 380, height: 520 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
   return page;
 }
+
+test('toolbar popup opens at 380px without squeezing the shortcut', async () => {
+  await worker.evaluate(() => chrome.action.openPopup());
+  const { targetInfos } = await browserSession.send('Target.getTargets');
+  const target = targetInfos.find(target => target.url === `chrome-extension://${extensionId}/popup.html`);
+  assert.ok(target, 'the actual toolbar popup must open');
+  const { sessionId } = await browserSession.send('Target.attachToTarget', { targetId: target.targetId });
+  const result = new Promise(resolve => {
+    const receive = event => {
+      if (event.sessionId !== sessionId) return;
+      const message = JSON.parse(event.message);
+      if (message.id !== 1) return;
+      browserSession.off('Target.receivedMessageFromTarget', receive);
+      resolve(message);
+    };
+    browserSession.on('Target.receivedMessageFromTarget', receive);
+  });
+  try {
+    await browserSession.send('Target.sendMessageToTarget', {
+      sessionId,
+      message: JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: {
+        expression: `new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve({
+          width: innerWidth,
+          overflow: document.documentElement.scrollWidth > innerWidth,
+          shortcutWrap: getComputedStyle(document.querySelector('.shortcut-hint')).whiteSpace
+        }))))`,
+        awaitPromise: true, returnByValue: true
+      } })
+    });
+    const response = await result;
+    assert.deepEqual(response.result.result.value, { width: 380, overflow: false, shortcutWrap: 'nowrap' });
+  } finally {
+    await browserSession.send('Target.closeTarget', { targetId: target.targetId });
+  }
+});
+
 async function configure(overrides = {}, response = {}) {
   await until(() => worker.evaluate(() => jobs.size === 0));
   const controls = await popup();

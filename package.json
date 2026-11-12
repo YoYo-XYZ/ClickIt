@@ -1,6 +1,6 @@
 {
   "name": "clickit",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "private": true,
   "engines": { "node": ">=22.19.0" },
   "description": "Single-question quiz suggestions with monthly AI subscriptions or your own API key",
