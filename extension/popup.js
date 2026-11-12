@@ -69,6 +69,12 @@ function showCredits() {
   $('cancelSubscription').hidden = !live || sub.cancelAtPeriodEnd;
   $('resumeSubscription').hidden = !live || !sub.cancelAtPeriodEnd;
   $('creditBalance').textContent = hosted.registered ? `${value?.credits ?? '…'} credits left` : '10 free answers';
+  if (!hosted.registered) {
+    const trial = document.createElement('span');
+    trial.className = 'trial-highlight';
+    trial.textContent = '10 free';
+    $('creditBalance').replaceChildren(trial, ' answers');
+  }
   $('creditBreakdown').hidden = !hosted.registered || value?.monthlyCredits === undefined;
   $('creditBreakdown').textContent = `${value?.monthlyCredits ?? 0} monthly credits · ${value?.otherCredits ?? 0} free / legacy credits`;
   const date = sub ? new Date(sub.periodEnd).toLocaleDateString() : '';
@@ -84,6 +90,14 @@ function showCredits() {
     !value?.checkoutEnabled ? 'Subscriptions are not available yet. Your credits are preserved.' :
     'Choose Basic or Plus. Renews monthly until canceled. Monthly credits do not roll over.'
   ) : 'Then Basic $4.99/month for 500 credits or Plus $9.99/month for 1,200 credits. No card required to try.';
+  const note = $('creditNote');
+  note.replaceChildren(...note.textContent.split(/\b(Basic|Plus)\b/).map(part => {
+    if (part !== 'Basic' && part !== 'Plus') return document.createTextNode(part);
+    const badge = document.createElement('span');
+    badge.className = `plan-badge plan-badge-${part.toLowerCase()}`;
+    badge.textContent = part;
+    return badge;
+  }));
   $('creditError').textContent = hosted.error || (value?.billingSyncError ? 'Billing sync needs attention. Refresh later or contact support.' : !hosted.configured ? 'Hosted AI is not connected in this build. Advanced settings supports your own API key.' : '');
 }
 function showPrompt() {
