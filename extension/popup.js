@@ -277,7 +277,7 @@ function accountAction(message) {
       $('showAccessKey').textContent = 'Show key';
       $('showAccessKey').setAttribute('aria-pressed', 'false');
     }
-    if (message.type === 'startTrial') { showSettings(false); notice('Ready. Press Answer on your quiz.'); }
+    if (message.type === 'startTrial') showSettings(false);
     if (message.type === 'retryBilling') { $('upgradeQuote').hidden = true; upgradeQuote = null; showCredits(); }
     const notices = { checkout: 'Checkout opened on Stripe. Return here after payment.', billingPortal: 'Billing opened on Stripe. Return here when finished.', refreshBalance: 'Balance updated.' };
     if (notices[message.type]) notice(notices[message.type]);
