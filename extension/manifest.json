@@ -4,7 +4,7 @@
   "version": "2.1.7",
   "description": "Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.",
   "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["https://api.typesafe.ai/*", "https://openrouter.ai/*"],
+  "host_permissions": ["https://api.typesafe.ai/*", "https://openrouter.ai/*", "https://clickit.thammatorn-clickit.workers.dev/*"],
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
   "background": { "service_worker": "background.js" },
   "commands": {
@@ -13,5 +13,7 @@
       "description": "Answer the current question"
     }
   },
-  "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } }
+  "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "32": "icons/32.png" } },
+  "homepage_url": "https://clickit.thammatorn-clickit.workers.dev",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxAHkJXdw48GqrI0RprXQOUsSFJ5Z8wHb+XIeOTKVga9+jl8KjZc+hbaQmZE60gahD/mij8GmfClHAV70UpPC7YopE2fjTpazNZp4iesUVYbUPsAHFqcbrkVUifCtNNk5PMZv/yUd7G0XvfeB7/gSYGoYhOTIbvUUzqq/cCRckyPY1VeTgX28GtuUXTjhS4t0VXepDm6pipJX10XXWlr9VcgHN8U5fq4i5oO13s7OKRSqBV4Z/VC1cLL5LZUo51J7jHkmUqU645zJphIZdPlxuzdeZwUgYUMyAXFGa0+P+H75sPjvImkWNo4GxC8HZWUaWLdxLhqMWslTTkZNiLeGmQIDAQAB"
 }

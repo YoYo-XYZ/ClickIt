@@ -4,7 +4,7 @@ Choose an answer to a visible single-choice quiz question with one click. Includ
 
 Clickit includes a hosted service with 15 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The service runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. The configured GitHub release includes hosted Text and Vision and subscription access.
 
-Download the configured ZIP from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest) for hosted access. It includes the assigned extension identity recognized by the backend. The source `extension` folder remains an unconfigured development build for API-key use.
+Download the ZIP from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest), or load the source `extension` folder directly. Both use the production hosted service and the assigned Chrome Web Store identity, with subscriptions and your own API-key access.
 
 <p>
   <img src="docs/images/answer.png" width="300" align="top" alt="Clickit with the Vision selector, Answer button, and status message">
@@ -31,7 +31,7 @@ Update the same folder, then click **Reload** on Clickit in `chrome://extensions
 
 Hosted mode uses credits. Advanced API-key mode is billed by your provider. Vision sends the visible tab screenshot. Answers can be wrong.
 
-## Deploy the monetized release
+## Build and validate
 
 The [Worker configuration](server/wrangler.jsonc) defines the service gates, allowed extension origins, D1 binding, and Stripe price IDs. [Billing integration tests](scripts/test-subscriptions-stripe.cjs) cover Stripe test-clock validation.
 
@@ -39,7 +39,7 @@ The [Worker configuration](server/wrangler.jsonc) defines the service gates, all
 npm ci
 npm test
 npm run check:worker
-npm run package:extension -- --api-url https://YOUR-WORKER.workers.dev
+npm run package:extension
 ```
 
 On Windows, `npm run test:hotkey:windows` opens a temporary Chromium profile and verifies real hotkeys in Text and Vision, duplicate protection, and shortcut remapping. It uses mocked AI responses and does not spend credits.

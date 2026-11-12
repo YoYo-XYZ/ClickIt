@@ -1,41 +1,18 @@
-// Build a release in dist without editing the developer installation.
+// Package the production extension in dist without changing its source.
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { parseArgs } = require('node:util');
-const crypto = require('node:crypto');
 const root = path.resolve(__dirname, '..');
-const { values: { 'api-url': rawUrl = '', 'support-url': supportUrl, 'public-key-file': publicKeyFile } } = parseArgs({
-  options: { 'api-url': { type: 'string' }, 'support-url': { type: 'string', default: 'mailto:thammatorn.j@gmail.com' }, 'public-key-file': { type: 'string' } }
-});
-let publicKey;
-if (publicKeyFile) {
-  const encoded = fs.readFileSync(publicKeyFile, 'utf8').replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
-  const key = crypto.createPublicKey({ key: Buffer.from(encoded, 'base64'), format: 'der', type: 'spki' });
-  publicKey = key.export({ format: 'der', type: 'spki' }).toString('base64');
-}
-let apiUrl = '';
-if (rawUrl) {
-  const parsed = new URL(rawUrl);
-  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') throw new Error('--api-url must be an HTTPS origin, with no path or credentials.');
-  apiUrl = parsed.origin;
-}
-if (!/^(mailto:[^\s]+@[^\s]+|https:\/\/[^\s]+)$/.test(supportUrl)) throw new Error('Use a valid support email link or HTTPS URL.');
+if (process.argv.length > 2) throw new Error('Build configuration arguments are no longer supported. Run npm run package:extension without arguments.');
 const output = path.join(root, 'dist', 'extension');
 // Remove only this generated directory so stale files never enter a release ZIP.
 if (path.relative(path.join(root, 'dist'), output) !== 'extension') throw new Error('Unexpected package output path.');
 fs.rmSync(output, { recursive: true, force: true });
 fs.cpSync(path.join(root, 'extension'), output, { recursive: true });
-fs.writeFileSync(path.join(output, 'config.js'), `globalThis.ClickItConfig = Object.freeze(${JSON.stringify({ apiUrl, supportUrl })});\n`);
-const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'));
-if (apiUrl) manifest.host_permissions.push(`${apiUrl}/*`);
-if (apiUrl) manifest.homepage_url = apiUrl;
-if (publicKey) manifest.key = publicKey;
-fs.writeFileSync(path.join(output, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 if (process.platform === 'win32') {
   // Both paths are fixed inside dist; no shell interpolation of user arguments.
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
     "Compress-Archive -Path './dist/extension/*' -DestinationPath './dist/clickit-extension.zip' -Force"], { cwd: root, stdio: 'pipe' });
   console.log('Created dist/clickit-extension.zip');
 }
-console.log(`Created ${output}${apiUrl ? ` for ${apiUrl}` : ' in BYOK development mode; hosted service is unconfigured'}.`);
+console.log(`Created ${output}.`);

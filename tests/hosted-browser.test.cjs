@@ -2,9 +2,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
 const { chromium } = require('playwright');
-let context, worker, extensionId, session, output;
+let context, worker, extensionId, session;
 const fixture = '<main><h1>What is 2 + 2?</h1><div><button class="option">3</button><button class="option">4</button></div><button id="submit">Submit</button></main><script>window.clicks=0;window.submits=0;document.addEventListener("click",e=>{if(e.target.matches(".option"))clicks++;if(e.target.id==="submit")submits++})</script>';
 const token = `ci_${'a'.repeat(64)}`;
 async function until(check) {
@@ -12,17 +11,12 @@ async function until(check) {
   while (!await check()) { if (Date.now() > deadline) throw new Error('Timed out'); await new Promise(resolve => setTimeout(resolve, 20)); }
 }
 before(async () => {
-  output = fs.mkdtempSync(path.join(os.tmpdir(), 'clickit-hosted-tests-'));
-  const extension = path.join(output, 'extension');
-  fs.cpSync(path.resolve(__dirname, '../extension'), extension, { recursive: true });
-  fs.writeFileSync(path.join(extension, 'config.js'), 'globalThis.ClickItConfig=Object.freeze({apiUrl:"https://clickit.example",supportUrl:"mailto:thammatorn.j@gmail.com"});');
-  const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json'), 'utf8'));
-  manifest.host_permissions.push('https://clickit.example/*');
-  fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify(manifest));
+  const extension = path.resolve(__dirname, '../extension');
   context = await chromium.launchPersistentContext('', { channel: 'chromium', headless: true,
     args: ['--enable-unsafe-extension-debugging', `--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
   worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
   extensionId = worker.url().split('/')[2];
+  assert.equal(extensionId, 'dfpglkafpdbnfecohhgmhkpceinhhpjl');
   session = await context.browser().newBrowserCDPSession();
   await worker.evaluate(() => {
     globalThis.hostedCalls = [];
@@ -75,8 +69,6 @@ before(async () => {
 });
 after(async () => {
   await context?.close();
-  // Verify the generated temporary root before recursively removing the test artifact.
-  if (output && path.dirname(output) === path.resolve(os.tmpdir()) && path.basename(output).startsWith('clickit-hosted-tests-')) fs.rmSync(output, { recursive: true, force: true });
 });
 async function popup() {
   const page = await context.newPage();
@@ -276,7 +268,8 @@ test('subscription controls preview upgrades before charging and manage renewals
   try {
     await controls.locator('#settingsToggle').click();
     assert.equal(await controls.locator('#subscribeOptions').isHidden(), true);
-    assert.match(await controls.locator('#creditBreakdown').textContent(), /200 monthly credits/);
+    assert.equal(await controls.locator('#creditBalance').textContent(), '210 credits left');
+    assert.equal((await worker.evaluate(() => ClickItHosted.state())).balance.monthlyCredits, 200);
     await controls.locator('#upgradePlan').click();
     await controls.locator('#upgradeQuote').waitFor({ state:'visible' });
     assert.match(await controls.locator('#upgradeQuoteText').textContent(), /700 credits/);
@@ -289,7 +282,8 @@ test('subscription controls preview upgrades before charging and manage renewals
     await until(async () => (await controls.locator('#confirmUpgrade').textContent()).startsWith('Pay'));
     assert.equal((await worker.evaluate(() => hostedCalls.filter(c => c.route === '/v1/subscription/change'))).length, 0);
     await controls.locator('#confirmUpgrade').click();
-    await until(async () => (await controls.locator('#creditBreakdown').textContent()).includes('900 monthly credits'));
+    await until(async () => (await controls.locator('#creditBalance').textContent()) === '910 credits left');
+    assert.equal((await worker.evaluate(() => ClickItHosted.state())).balance.monthlyCredits, 900);
     await controls.locator('body').screenshot({ path:path.resolve(__dirname,'../test-results/hosted-subscription.png') });
     await controls.locator('#downgradePlan').click();
     await until(async () => (await controls.locator('#creditNote').textContent()).includes('renews on Basic'));
@@ -327,7 +321,8 @@ test('reopening the popup can retry a lost billing response using the original c
     await controls.locator('#retryBilling').waitFor({state:'visible'});
     await controls.locator('#retryBilling').click();
     await until(()=>controls.locator('#retryBilling').isHidden());
-    assert.match(await controls.locator('#creditBreakdown').textContent(),/900 monthly credits/);
+    assert.equal(await controls.locator('#creditBalance').textContent(), '910 credits left');
+    assert.equal((await worker.evaluate(() => ClickItHosted.state())).balance.monthlyCredits, 900);
     const changes=await worker.evaluate(()=>hostedCalls.filter(c=>c.route==='/v1/subscription/change'));
     assert.equal(changes.length,2);assert.equal(changes[0].body.changeId,changes[1].body.changeId);
     assert.equal(await worker.evaluate(()=>serverCredits),910);

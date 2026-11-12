@@ -55,7 +55,6 @@ async function startAnswer(tab) {
     if (config.billingMode === 'byok' && !config.byokConsent) throw new Error('Review and accept the data sharing disclosure in Settings before answering.');
     if (config.billingMode === 'hosted') {
       const hosted = await ClickItHosted.state();
-      if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Choose Your API key in Settings.');
       if (!hosted.registered) throw new Error('Start your free trial in Settings under AI access first.');
       if (!hosted.consented) throw new Error('Review and accept the data sharing disclosure in Settings before answering.');
       if (config.mode === 'vision' && !hosted.balance?.visionEnabled) throw new Error('Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');

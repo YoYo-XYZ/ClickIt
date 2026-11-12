@@ -12,13 +12,8 @@
     pending = stored.hostedPending || {};
     billingOperation = stored.hostedBillingOperation || null;
   });
-  const configured = (() => {
-    try { const url = new URL(config.apiUrl); return url.protocol === 'https:' && url.origin === config.apiUrl; }
-    catch { return false; }
-  })();
   async function api(path, data, options = {}) {
     await ready;
-    if (!configured) throw new Error('Hosted service is not configured in this build. Choose Your API key in Settings.');
     const response = await fetch(`${config.apiUrl}/v1/${path}`, {
       method: data === undefined ? 'GET' : 'POST',
       headers: { ...(options.anonymous ? {} : { Authorization: `Bearer ${options.credential || credential}` }),
@@ -50,7 +45,7 @@
   }
   async function refresh(force = false) {
     await ready;
-    if (!credential || !configured) return;
+    if (!credential) return;
     if (refreshing) return refreshing;
     if (!force && Date.now() - lastRefresh < 15000) return;
     refreshing = (async () => {
@@ -65,7 +60,7 @@
     let error = '';
     try { await refresh(force); } catch (e) { error = e.message; }
     await ready;
-    return { configured, registered: Boolean(credential), consented, credential,
+    return { registered: Boolean(credential), consented, credential,
       balance: cached, pending: Object.keys(pending).length, billingOperationPending: Boolean(billingOperation), error };
   }
   async function register(consent) {

@@ -7,21 +7,14 @@ const { chromium } = require('playwright');
 const fixture = require('../tests/fixtures/vision.cjs');
 
 async function main() {
-  const [base, credentialFile] = process.argv.slice(2);
-  assert.equal(new URL(base).protocol, 'https:');
-  assert.equal(new URL(base).origin, base);
+  const [credentialFile] = process.argv.slice(2);
+  if (!credentialFile || process.argv.length !== 3) throw new Error('Usage: node scripts/live-hosted-extension.cjs <credential-file>');
   const credential = fs.readFileSync(credentialFile, 'utf8').trim();
   if (!/^ci_[a-f0-9]{64}$/.test(credential)) throw new Error('The installation access key has an invalid format.');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clickit-hosted-'));
   let context;
   try {
-    const extension = path.join(directory, 'extension');
-    fs.cpSync(path.resolve(__dirname, '../extension'), extension, { recursive: true });
-    fs.writeFileSync(path.join(extension, 'config.js'), `globalThis.ClickItConfig = Object.freeze(${JSON.stringify({ apiUrl: base })});`);
-    const manifest = JSON.parse(fs.readFileSync(path.join(extension, 'manifest.json')));
-    manifest.host_permissions.push(`${base}/*`);
-    manifest.key = fs.readFileSync(path.resolve(__dirname, '../docs/chrome-web-store-public-key.pem'), 'utf8').replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
-    fs.writeFileSync(path.join(extension, 'manifest.json'), JSON.stringify(manifest));
+    const extension = path.resolve(__dirname, '../extension');
     context = await chromium.launchPersistentContext(path.join(directory, 'profile'), {
       channel: 'chromium', headless: true, viewport: { width: 1000, height: 700 },
       args: ['--enable-unsafe-extension-debugging', `--disable-extensions-except=${extension}`, `--load-extension=${extension}`]
@@ -75,6 +68,7 @@ async function main() {
     }
   } finally {
     if (context) await context.close();
+    if (path.dirname(directory) !== path.resolve(os.tmpdir()) || !path.basename(directory).startsWith('clickit-hosted-')) throw new Error('Unexpected temporary profile path.');
     fs.rmSync(directory, { recursive: true, force: true });
   }
 }

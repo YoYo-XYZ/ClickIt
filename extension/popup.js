@@ -37,7 +37,7 @@ function controls() {
   $('answerLabel').textContent = label;
   $('answerNow').setAttribute('aria-label', label);
   $('answerNow').setAttribute('aria-busy', String(running));
-  $('startTrial').disabled ||= !hosted?.configured || !$('adultConsent').checked || !$('dataConsent').checked;
+  $('startTrial').disabled ||= !$('adultConsent').checked || !$('dataConsent').checked;
   const billingBlocked = Boolean(hosted?.billingOperationPending);
   $('buyCredits').disabled ||= !hosted?.balance?.checkoutEnabled || billingBlocked;
   $('upgradePlan').disabled ||= !hosted?.balance?.checkoutEnabled || billingBlocked;
@@ -81,7 +81,7 @@ function showCredits() {
   const live = sub && !['canceled', 'incomplete_expired'].includes(sub.status);
   const paymentDue = Boolean(sub?.pendingUpgrade || sub?.paymentActionRequired);
   $('retryBilling').hidden = !hosted.billingOperationPending;
-  $('trialConsent').hidden = !hosted.configured || (hosted.registered && hosted.consented);
+  $('trialConsent').hidden = hosted.registered && hosted.consented;
   $('startTrial').textContent = hosted.registered ? 'Accept and continue' : 'Try 15 free answers';
   $('refreshBalance').hidden = !hosted.registered;
   $('subscribeOptions').hidden = !hosted.registered || !hosted.consented || !value || live;
@@ -91,7 +91,7 @@ function showCredits() {
   $('keepPlan').hidden = !live || !sub.scheduledPlan;
   $('cancelSubscription').hidden = !live || sub.cancelAtPeriodEnd;
   $('resumeSubscription').hidden = !live || !sub.cancelAtPeriodEnd;
-  $('creditBalance').textContent = hosted.registered ? value ? `${value.credits} credits left` : 'Balance unavailable' : hosted.configured ? '15 free answers' : 'Connect your API key';
+  $('creditBalance').textContent = hosted.registered ? value ? `${value.credits} credits left` : 'Balance unavailable' : '15 free answers';
   const date = sub ? new Date(sub.periodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const planName = sub?.planId === 'plus' ? 'Plus' : 'Basic';
   $('creditNote').textContent = hosted.registered ? (
@@ -105,14 +105,14 @@ function showCredits() {
     !value ? 'Refresh to check your credits and plan.' :
     !value.checkoutEnabled ? 'Subscriptions are currently unavailable. Your credits are preserved.' :
     value.credits === 0 ? 'Choose a plan to continue.' : ''
-  ) : hosted.configured ? 'No card required. No automatic subscription.' : 'Clickit AI is unavailable in this build. Choose Your API key above.';
+  ) : 'No card required. No automatic subscription.';
   $('creditNote').classList.toggle('attention', paymentDue);
   $('manageSubscription').textContent = paymentDue ? 'Resolve payment on Stripe' : 'Manage billing';
   $('manageSubscription').classList.toggle('primary', paymentDue);
   setText('creditError', hosted.error || (value?.billingSyncError ? 'Billing could not sync. Refresh or contact support.' : ''));
   const ownKey = saved?.billingMode === 'byok';
   $('accountSummary').textContent = ownKey ? 'Using your API key' : $('creditBalance').textContent;
-  $('accountAction').textContent = ownKey || !hosted.configured ? 'Settings →' : !hosted.registered || !hosted.consented ? 'Get started →' : paymentDue ? 'Fix payment →' : live ? 'Manage plan →' : 'View plans →';
+  $('accountAction').textContent = ownKey ? 'Settings →' : !hosted.registered || !hosted.consented ? 'Get started →' : paymentDue ? 'Fix payment →' : live ? 'Manage plan →' : 'View plans →';
 }
 function showPrompt() {
   $('modeHint').textContent = selectedMode() === 'vision' ? 'Uses a screenshot of the visible tab.' : 'Reads the question and choices on this page.';
@@ -321,12 +321,10 @@ $('showAccessKey').addEventListener('click', () => {
   $('showAccessKey').textContent = show ? 'Hide key' : 'Show key';
   $('showAccessKey').setAttribute('aria-pressed', String(show));
 });
-if (ClickItConfig.apiUrl) {
-  $('privacyLink').href = `${ClickItConfig.apiUrl}/privacy.html`;
-  $('privacyLink').hidden = false;
-  $('termsLink').href = `${ClickItConfig.apiUrl}/terms.html`;
-  $('termsLink').hidden = false;
-}
+$('privacyLink').href = `${ClickItConfig.apiUrl}/privacy.html`;
+$('privacyLink').hidden = false;
+$('termsLink').href = `${ClickItConfig.apiUrl}/terms.html`;
+$('termsLink').hidden = false;
 $('supportLink').href = ClickItConfig.supportUrl;
 void refresh(true);
 void refreshShortcut();
