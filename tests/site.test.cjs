@@ -42,6 +42,11 @@ test('public pages fit desktop/mobile, show only real install links, and sample 
   assert.equal(await page.locator('#result').textContent(), '');
   await page.locator('#submit').click();
   assert.equal(await page.locator('#result').textContent(), 'Correct. 2 + 2 = 4.');
+  await page.locator('.answers button').first().click();
+  assert.equal(await page.locator('#result').textContent(), '');
+  assert.equal(await page.locator('.answers button').first().getAttribute('aria-pressed'), 'true');
+  await page.locator('#submit').click();
+  assert.equal(await page.locator('#result').textContent(), 'The correct answer is 4.');
   launched = true;
   await page.goto('https://clickit.example/');
   await page.locator('[data-install]').waitFor({ state: 'visible' });

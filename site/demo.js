@@ -1,6 +1,7 @@
 let chosen;
 for (const button of document.querySelectorAll('.answers button')) button.addEventListener('click', () => {
   chosen = button.textContent;
+  document.getElementById('result').textContent = '';
   for (const option of document.querySelectorAll('.answers button')) option.setAttribute('aria-pressed', String(option === button));
 });
 document.getElementById('submit').addEventListener('click', () => {
