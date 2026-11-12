@@ -26,7 +26,7 @@ before(async () => {
   session = await context.browser().newBrowserCDPSession();
   await worker.evaluate(() => {
     globalThis.hostedCalls = [];
-    globalThis.serverCredits = 10;
+    globalThis.serverCredits = 15;
     globalThis.hostedMock = { delay: 0, failCompletion: false, checkoutEnabled: false };
     globalThis.openedCheckouts = [];
     globalThis.hostedChangeResults = {};
@@ -117,6 +117,7 @@ test('new hosted installations ask for consent and never send an API request jus
   try {
     assert.equal(await controls.locator('input[name="billingMode"][value="hosted"]').isChecked(), true);
     assert.equal(await controls.locator('#startTrial').isDisabled(), true);
+    assert.equal(await controls.locator('#creditBalance').textContent(), '15 free answers');
     assert.equal((await worker.evaluate(() => hostedCalls)).length, 0);
     assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
     await controls.locator('#settingsToggle').click();
@@ -126,7 +127,7 @@ test('new hosted installations ask for consent and never send an API request jus
     await controls.locator('#dataConsent').check();
     await controls.locator('#startTrial').click();
     await until(() => controls.locator('#trialConsent').isHidden());
-    assert.equal(await controls.locator('#creditBalance').textContent(), '10 credits left');
+    assert.equal(await controls.locator('#creditBalance').textContent(), '15 credits left');
     const calls = await worker.evaluate(() => hostedCalls);
     assert.equal(calls[0].body.adultConsent, true);
     assert.equal(calls[0].body.dataConsent, true);
@@ -159,7 +160,7 @@ test('a hosted suggestion clicks once then settles, while balance refresh never 
     assert.equal(completion.body.requestId, request.body.requestId);
     assert.deepEqual(await worker.evaluate(async () => (await chrome.storage.local.get('hostedPending')).hostedPending), {});
     await controls.evaluate(() => refresh());
-    assert.equal(await controls.locator('#creditBalance').textContent(), '9 credits left');
+    assert.equal(await controls.locator('#creditBalance').textContent(), '14 credits left');
     // Store artwork shows the intended launch configuration, not the disabled pilot gate.
     await worker.evaluate(async () => { hostedMock.checkoutEnabled = true; await ClickItHosted.state(true); });
     await controls.evaluate(() => refresh());

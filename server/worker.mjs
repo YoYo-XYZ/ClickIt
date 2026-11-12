@@ -156,7 +156,7 @@ async function route(request, env, url, fetchImpl, now) {
         AND (SELECT COUNT(*) FROM installations WHERE ip_hash=? AND created_at>?)<3`,
       id, await hash(credential), ipHash, source, now, now, ipHash, now - 86400000),
       stmt(db, `INSERT INTO credit_lots(id,installation_id,granted,created_at)
-        SELECT ?,id,10,? FROM installations WHERE id=?`, `trial:${id}`, now, id)
+        SELECT ?,id,15,? FROM installations WHERE id=?`, `trial:${id}`, now, id)
     ]);
     if (!result[0].meta.changes) fail(429, 'The trial limit has been reached. Try later or contact support.');
     return json({ credential, installationId: id, ...await service.snapshot(id) }, 201);

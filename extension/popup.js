@@ -68,11 +68,11 @@ function showCredits() {
   $('keepPlan').hidden = !live || !sub.scheduledPlan;
   $('cancelSubscription').hidden = !live || sub.cancelAtPeriodEnd;
   $('resumeSubscription').hidden = !live || !sub.cancelAtPeriodEnd;
-  $('creditBalance').textContent = hosted.registered ? `${value?.credits ?? '…'} credits left` : '10 free answers';
+  $('creditBalance').textContent = hosted.registered ? `${value?.credits ?? '…'} credits left` : '15 free answers';
   if (!hosted.registered) {
     const trial = document.createElement('span');
     trial.className = 'trial-highlight';
-    trial.textContent = '10 free';
+    trial.textContent = '15 free';
     $('creditBalance').replaceChildren(trial, ' answers');
   }
   $('creditBreakdown').hidden = !hosted.registered || value?.monthlyCredits === undefined;

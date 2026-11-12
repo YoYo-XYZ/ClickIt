@@ -26,7 +26,7 @@ test('trial consent, opaque credentials, stored hashes, source, IP rate limit, a
   const s = await setup(t);
   assert.equal((await s.req('installations', { adultConsent: false, dataConsent: true })).status, 400);
   const user = await s.register();
-  assert.equal(user.credits, 10);
+  assert.equal(user.credits, 15);
   assert.match(user.credential, /^ci_[a-f0-9]{64}$/);
   const stored = s.db.sql.prepare('SELECT * FROM installations WHERE id=?').get(user.installationId);
   assert.notEqual(stored.credential_hash, user.credential);
@@ -39,6 +39,24 @@ test('trial consent, opaque credentials, stored hashes, source, IP rate limit, a
   for (let i = 3; i < 100; i++) await s.register(`198.51.100.${i}`);
   assert.equal((await s.req('installations', { adultConsent: true, dataConsent: true }, null, { 'CF-Connecting-IP': 'new-address' })).status, 429);
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM credit_lots').get().n, 100);
+});
+
+test('new trials get 15 suggestions without changing existing trial balances', async t => {
+  const s = await setup(t);
+  const existing = await s.register();
+  s.db.sql.prepare('UPDATE credit_lots SET granted=10, consumed=4 WHERE installation_id=?').run(existing.installationId);
+  const user = await s.register();
+  assert.equal(user.credits, 15);
+  assert.equal((await (await s.req('balance', undefined, existing.credential)).json()).credits, 6);
+  for (let remaining = 14; remaining >= 0; remaining--) {
+    const result = await s.solve(user.credential);
+    assert.equal(result.response.status, 200);
+    const completed = await s.req('answers/complete', { requestId: result.requestId, delivered: true }, user.credential);
+    assert.equal((await completed.json()).credits, remaining);
+    s.advance(60001);
+  }
+  assert.equal((await s.solve(user.credential)).response.status, 402);
+  assert.equal((await (await s.req('balance', undefined, existing.credential)).json()).credits, 6);
 });
 
 test('hosted requests use default prompts when omitted, settle once, and reject a second active request', async t => {
@@ -56,12 +74,12 @@ test('hosted requests use default prompts when omitted, settle once, and reject 
   assert.equal((await s.solve(user.credential)).response.status, 409);
   assert.equal((await s.solve(user.credential, first.requestId)).response.status, 409);
   let current = await (await s.req('balance', undefined, user.credential)).json();
-  assert.equal(current.credits, 9); assert.equal(current.reserved, 1);
+  assert.equal(current.credits, 14); assert.equal(current.reserved, 1);
   const complete = () => s.req('answers/complete', { requestId: first.requestId, delivered: true }, user.credential);
   assert.equal((await complete()).status, 200);
   await complete(); await s.req('answers/complete', { requestId: first.requestId, delivered: false }, user.credential);
   current = await (await s.req('balance', undefined, user.credential)).json();
-  assert.equal(current.credits, 9); assert.equal(current.reserved, 0);
+  assert.equal(current.credits, 14); assert.equal(current.reserved, 0);
   assert.equal(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano, 42000);
 });
 
@@ -82,7 +100,7 @@ test('page rejection, invalid results, upstream errors, and expiry return credit
   const abandoned = await s.solve(user.credential);
   s.advance(120001);
   await s.worker.scheduled({}, s.env);
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 10);
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 15);
   await s.req('answers/complete', { requestId: abandoned.requestId, delivered: true }, user.credential);
   assert.equal(s.db.sql.prepare('SELECT consumed FROM credit_lots').get().consumed, 0);
   assert.ok(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano >= 22020096);
@@ -102,7 +120,7 @@ test('atomic SQL guards prevent overspend, early settlement, and cross-installat
   assert.equal((await s.solve(user.credential)).response.status, 409);
   unblock(); await pending;
   await s.req('answers/complete', { requestId: request.id, delivered: true }, user.credential);
-  s.db.sql.exec('UPDATE credit_lots SET consumed=10 WHERE reserved=0');
+  s.db.sql.exec('UPDATE credit_lots SET consumed=granted WHERE reserved=0');
   assert.equal((await s.solve(user.credential)).response.status, 402);
   assert.equal(s.calls.length, 1);
 });
@@ -113,7 +131,7 @@ test('global budget, request limits, disabled Vision, gates, and payload bounds 
   s.db.sql.exec('UPDATE budget SET limit_nano=11010047');
   assert.equal((await s.solve(user.credential)).response.status, 503);
   assert.equal(s.calls.length, 0);
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 10);
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 15);
   const vision = await s.req('answers', { requestId: crypto.randomUUID(), mode: 'vision', image: 'iVBORw0KGgo=' }, user.credential);
   assert.equal(vision.status, 403);
   assert.equal((await s.req('answers', { padding: 'x'.repeat(3000001) }, user.credential)).status, 413);
@@ -149,7 +167,7 @@ test('legacy purchases still fulfill once through signed webhooks, and new purch
   assert.equal((await s.req('checkout', { checkoutId: crypto.randomUUID() }, user.credential)).status, 400);
   await s.notify('checkout.session.completed', { id: s.state.session.id });
   await s.notify('checkout.session.async_payment_succeeded', { id: s.state.session.id }, { eventId: 'evt_second' });
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 510);
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 515);
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 1);
   assert.equal((await s.notify('checkout.session.completed', { id: s.state.session.id }, { forged: true })).status, 400);
   assert.equal((await s.notify('checkout.session.completed', { id: s.state.session.id }, { age: 301 })).status, 400);
@@ -174,7 +192,7 @@ test('refunds revoke unused entitlement idempotently, including held credits and
   const s = await setup(t);
   const user = await s.register();
   await s.purchase(user);
-  s.db.sql.exec("UPDATE credit_lots SET consumed=10 WHERE order_id IS NULL");
+  s.db.sql.exec("UPDATE credit_lots SET consumed=granted WHERE order_id IS NULL");
   const held = await s.solve(user.credential);
   const refund = { payment_intent: s.state.session.payment_intent, amount_refunded: 499 };
   await s.notify('charge.refunded', refund);
@@ -186,7 +204,7 @@ test('refunds revoke unused entitlement idempotently, including held credits and
   const other = await s.register('198.51.100.150');
   s.state.refunded = 499;
   assert.equal((await s.purchase(other, 'cs_refunded_before_delivery')).status, 200);
-  assert.equal((await (await s.req('balance', undefined, other.credential)).json()).credits, 10);
+  assert.equal((await (await s.req('balance', undefined, other.credential)).json()).credits, 15);
 });
 
 test('partial refunds only reduce the matching purchase and never restore previously revoked credits', async t => {
@@ -195,7 +213,7 @@ test('partial refunds only reduce the matching purchase and never restore previo
   await s.purchase(user);
   await s.notify('charge.refunded', { payment_intent: s.state.session.payment_intent, amount_refunded: 100 });
   const remaining = (await (await s.req('balance', undefined, user.credential)).json()).credits;
-  assert.equal(remaining, 409); // ceil(500 * 100/499) = 101 revoked.
+  assert.equal(remaining, 414); // ceil(500 * 100/499) = 101 revoked.
   await s.notify('charge.refunded', { payment_intent: s.state.session.payment_intent, amount_refunded: 50 });
   assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, remaining);
 });
@@ -206,9 +224,9 @@ test('tax-inclusive refunds use the total charge as their denominator and preser
   await s.purchase(user);
   s.db.sql.exec("UPDATE orders SET total_amount=549,tax_amount=50");
   await s.notify('charge.refunded', { payment_intent: s.state.session.payment_intent, amount_refunded: 100 });
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 418); // 92 credits revoked.
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 423); // 92 credits revoked.
   await s.notify('charge.refunded', { payment_intent: s.state.session.payment_intent, amount_refunded: 549 });
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 10);
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 15);
   assert.equal(s.db.sql.prepare('SELECT refunded_amount FROM orders').get().refunded_amount, 549);
 });
 
@@ -224,7 +242,7 @@ test('scheduled retention deletes old technical history without removing balance
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM requests').get().n, 0);
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM events').get().n, 0);
   assert.equal(s.db.sql.prepare('SELECT ip_hash FROM installations').get().ip_hash, '');
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 509);
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 514);
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM orders').get().n, 1);
   assert.equal(s.db.sql.prepare('SELECT spent_nano FROM budget').get().spent_nano, cost);
 });
@@ -253,7 +271,7 @@ test('hosted Vision accepts independent target boxes and visibility failures ret
   s.state.provider.answers.ready.noul = .2;
   assert.equal((await s.req('answers', { ...input, prompt: undefined, requestId:crypto.randomUUID() }, user.credential)).status, 422);
   assert.equal(JSON.parse(s.calls[1].options.body).questions.target.instructions, globalThis.ClickIt.defaults.visionPrompt);
-  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 9);
+  assert.equal((await (await s.req('balance', undefined, user.credential)).json()).credits, 14);
 });
 
 test('OpenRouter reported cost takes precedence over token estimates, with bounded-token fallback', async t => {

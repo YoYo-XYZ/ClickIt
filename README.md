@@ -2,7 +2,7 @@
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
-Version 2.1.1 includes a hosted service with 10 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The service runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. The configured GitHub release includes hosted Text and Vision and subscription access.
+Clickit includes a hosted service with 15 free suggestions and monthly subscriptions: Basic at US$4.99 for 500 credits and Plus at US$9.99 for 1,200 credits. The service runs at https://clickit.thammatorn-clickit.workers.dev with OpenRouter inference. Monthly credits expire at renewal. The configured GitHub release includes hosted Text and Vision and subscription access.
 
 Download the configured ZIP from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest) for hosted access. It includes the assigned extension identity recognized by the backend. The source `extension` folder remains an unconfigured development build for API-key use.
 

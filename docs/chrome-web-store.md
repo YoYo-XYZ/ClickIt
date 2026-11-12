@@ -18,7 +18,7 @@ Clickit suggests one answer to a visible single-choice quiz question when you pr
 
 Text mode reads the visible question and answer choices. Vision mode sends a screenshot of the whole visible tab. Clickit selects a supported answer control or highlights an answer for you to click. You review the suggestion and submit the quiz yourself. Clickit never submits, advances to another question, or runs without an explicit Answer press or hotkey.
 
-Eligible new installations receive 10 free suggestions without a card. Basic costs US$4.99 per month for 500 credits. Plus costs US$9.99 per month for 1,200 credits. Plans renew automatically until canceled. Monthly credits expire at renewal and do not roll over. Checkout shows the total before you subscribe. Manage or cancel renewal in the extension. One valid delivered suggestion uses one credit, even if it is wrong. Failed requests and rejected page changes do not use credits.
+Eligible new installations receive 15 free suggestions without a card. Basic costs US$4.99 per month for 500 credits. Plus costs US$9.99 per month for 1,200 credits. Plans renew automatically until canceled. Monthly credits expire at renewal and do not roll over. Checkout shows the total before you subscribe. Manage or cancel renewal in the extension. One valid delivered suggestion uses one credit, even if it is wrong. Failed requests and rejected page changes do not use credits.
 
 Advanced settings support your own TypeSafe or OpenRouter API key, billed separately by your selected provider. Save separate Text and Vision prompts and manage Chrome's answer hotkey from Settings. Keep a private backup of your installation access key to restore hosted credits after reinstalling.
 

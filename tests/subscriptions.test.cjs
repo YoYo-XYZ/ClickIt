@@ -8,7 +8,7 @@ for (const planId of ['basic','plus']) test(`${planId} Checkout uses fixed month
   assert.equal((await s.req('billing-portal',null,user.credential)).status,400);
   assert.equal(Object.keys(s.remote.customers).length,0);
   const session = await s.checkout(user, planId);
-  assert.equal((await s.balance(user)).credits, 10);
+  assert.equal((await s.balance(user)).credits, 15);
   await s.checkout(user, planId);
   assert.equal(Object.keys(s.remote.sessions).length, 1);
   const call = s.calls.find(c => c.url.endsWith('/checkout/sessions'));
@@ -22,7 +22,7 @@ for (const planId of ['basic','plus']) test(`${planId} Checkout uses fixed month
   const sub = await s.complete(user, planId);
   const amount = planId === 'basic' ? 500 : 1200;
   assert.equal((await s.balance(user)).monthlyCredits, amount);
-  assert.equal((await s.balance(user)).otherCredits, 10);
+  assert.equal((await s.balance(user)).otherCredits, 15);
   await s.notify('invoice.paid', { id: sub.latest_invoice }); await s.notify('invoice.paid', { id: sub.latest_invoice });
   assert.equal((await s.balance(user)).monthlyCredits, amount);
   assert.equal(s.db.sql.prepare('SELECT COUNT(*) AS n FROM subscription_invoices').get().n, 1);
@@ -100,7 +100,7 @@ test('downgrades are scheduled, replaceable, and cancellation preserves paid cre
   await s.change(user, 'cancel'); s.advance(30*86400000); sub.status = 'canceled';
   await s.notify('customer.subscription.deleted', { id: sub.id });
   assert.equal((await s.balance(user)).monthlyCredits, 0);
-  assert.equal((await s.balance(user)).otherCredits, 10);
+  assert.equal((await s.balance(user)).otherCredits, 15);
   // Old completed checkout must not block a new subscription forever.
   await s.complete(user, 'basic');
   assert.equal((await s.balance(user)).monthlyCredits, 500);
@@ -119,7 +119,7 @@ test('monthly expiry is enforced in SQL, consumes monthly credits first, and all
   assert.equal(s.db.sql.prepare('SELECT consumed FROM credit_lots WHERE id=?').get(lot.id).consumed, 1);
   assert.throws(() => s.db.sql.prepare("INSERT INTO requests(id,installation_id,lot_id,mode,created_at,expires_at,cost_nano) VALUES(?,?,?,'text',?,?,11010048)")
     .run(crypto.randomUUID(), user.installationId, lot.id, s.time(), s.time()+120000), /no_credits/);
-  assert.equal((await s.balance(user)).otherCredits, 10);
+  assert.equal((await s.balance(user)).otherCredits, 15);
 });
 
 test('signed webhooks reject tampered products, owners, quantities and live environments', async t => {
@@ -148,7 +148,7 @@ test('refunds affect only the paid invoice including refunds preceding fulfillme
   s.remote.intents[base.payment_intent].latest_charge.amount_refunded=100;
   await s.notify('charge.refunded', { invoice: base.id, payment_intent: base.payment_intent, amount_refunded: 100 });
   assert.equal((await s.balance(user)).monthlyCredits, 399);
-  assert.equal((await s.balance(user)).otherCredits, 10);
+  assert.equal((await s.balance(user)).otherCredits, 15);
 });
 
 test('maintenance recovers missed renewals, key restoration shares state, and billing portal works behind checkout gate', async t => {
@@ -248,7 +248,7 @@ test('pre-fulfillment refunds never expose spendable credits; reconciliation rep
   s.remote.intents[invoice.payment_intent].latest_charge.amount_refunded=invoice.total;
   await s.notify('charge.refunded',{invoice:invoice.id,payment_intent:invoice.payment_intent,amount_refunded:invoice.total});
   assert.equal((await s.balance(user)).monthlyCredits,0);
-  assert.equal((await s.balance(user)).otherCredits,10);
+  assert.equal((await s.balance(user)).otherCredits,15);
   assert.equal(s.db.sql.prepare('SELECT revoked FROM credit_lots WHERE subscription_invoice_id=?').get(invoice.id).revoked,500);
   s.db.sql.exec('UPDATE subscription_invoices SET stripe_fee=NULL,stripe_fee_currency=NULL');
   await s.worker.scheduled({},s.env);
