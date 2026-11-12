@@ -60,22 +60,21 @@ body:has(#settingsPanel:not([hidden])) #answerPanel, body:has(#settingsPanel:not
 #message:empty, #creditNote:empty, #creditError:empty, #hotkeyError:empty, #timing:empty { display: none; }
 .billing-mode { min-width: 0; margin: 0; padding: 0; border: 0; }
 legend, .field-label, .prompt-heading label, #apiKeyHeading { padding: 0; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-#hostedPanel { margin-top: 18px; }
+#hostedPanel { margin-top: 16px; }
 .prompt-heading, .hotkey-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.credit-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0 8px; }
+.credit-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-bottom: 12px; }
 #creditBalance { font-size: 12px; color: var(--muted); }
-#manageSubscription { margin-left: auto; text-align: right; font-weight: normal; text-decoration: underline; text-underline-offset: 3px; }
 #resetPrompt, button.text-button { min-height: 32px; padding: 5px 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; }
+#manageSubscription { min-height: 0; margin-left: auto; padding: 0; text-align: right; font-weight: normal; }
 #resetPrompt:hover:not(:disabled), button.text-button:hover:not(:disabled) { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
 #creditNote { margin: 8px 0 14px; color: var(--muted); font-size: 12px; }
 #creditNote.attention { color: #f3c98d; }
+#trialConsent { margin-bottom: 12px; }
 .consent { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .consent input { flex: 0 0 auto; width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); }
-#startTrial, #buyCredits { width: 100%; margin-top: 4px; }
+#startTrial { width: 100%; margin-top: 4px; }
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); color: #edf3f5; }
 #subscriptionPlan, #provider { padding-inline: 6px; font-size: 12px; }
-#subscriptionPlan { margin-bottom: 8px; }
-#subscribeOptions .hint { margin-top: 8px; }
 #subscriptionActions { display: grid; gap: 8px; }
 #subscriptionActions .text-button { text-align: left; justify-self: start; }
 #upgradeQuote { display: grid; gap: 10px; padding: 14px 0; border-block: 1px solid var(--line); }
@@ -83,12 +82,14 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { width: 100%
 #upgradeQuote .text-button { justify-self: start; }
 #retryBilling { width: 100%; margin-top: 12px; }
 #creditError { color: #ffd1cb; font-size: 12px; margin-top: 10px; overflow-wrap: anywhere; }
-.account-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; font-size: 12px; }
+.account-links { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 12px; }
+.account-links a { color: var(--muted); text-decoration: none; }
+.account-links a:hover { color: var(--accent); text-decoration: underline; }
 details > summary { padding-block: 12px; font-size: 13px; color: #edf3f5; }
 details[open] > summary { margin-bottom: 4px; }
 .api-key-settings { margin-top: 16px; }
 #apiKeyHeading { font-weight: normal; }
-.api-credentials-controls { display: grid; gap: 8px; }
+.settings-controls { display: grid; gap: 8px; }
 .hotkey-settings { margin-top: 20px; padding: 14px 0; border-block: 1px solid var(--line); }
 .hotkey-heading { color: var(--muted); font-size: 12px; }
 #hotkeyValue { font: inherit; }

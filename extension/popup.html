@@ -50,7 +50,12 @@
             <p id="creditBalance" role="status">15 free answers</p>
             <button id="manageSubscription" class="text-button" type="button" hidden>Manage billing</button>
           </div>
-          <div id="subscribeOptions" hidden><select id="subscriptionPlan" aria-label="Monthly plan in USD"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" class="primary" type="button">Continue to checkout</button></div>
+          <div id="subscribeOptions" hidden>
+            <div class="settings-controls">
+              <select id="subscriptionPlan" aria-label="Monthly plan in USD"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select>
+              <button id="buyCredits" class="primary" type="button">Continue to checkout</button>
+            </div>
+          </div>
           <div id="subscriptionActions" hidden>
             <button id="upgradePlan" type="button" hidden>Upgrade to Plus</button>
             <button id="downgradePlan" class="text-button" type="button" hidden>Switch to Basic at renewal</button>
@@ -66,7 +71,7 @@
       </fieldset>
       <section id="byokSettings" class="api-key-settings" aria-labelledby="apiKeyHeading">
       <h2 id="apiKeyHeading">API key</h2>
-        <div class="api-credentials-controls">
+        <div class="settings-controls">
           <select id="provider" aria-label="API provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select>
           <input id="apiKey" type="password" aria-label="API Key" autocomplete="off" placeholder="Paste your API key">
         </div>
