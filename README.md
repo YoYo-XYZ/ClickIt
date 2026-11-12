@@ -1,4 +1,4 @@
-# ClickIt
+# Clickit
 
 Choose an answer to a visible single-choice quiz question with one click. Included AI credits or your own API key.
 
@@ -7,27 +7,27 @@ Version 1.0.1 includes a hosted service with 10 free suggestions and monthly sub
 Download the configured ZIP from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest) for hosted access. It includes the assigned extension identity recognized by the backend. The source `extension` folder remains an unconfigured development build for API-key use.
 
 <p>
-  <img src="docs/images/answer.png" width="300" align="top" alt="ClickIt with the Vision selector, Answer button, and status message">
-  <img src="docs/images/settings.png" width="300" align="top" alt="Settings with the API provider, key, editable Vision prompt, Reset, and Save settings">
+  <img src="docs/images/answer.png" width="300" align="top" alt="Clickit with the Vision selector, Answer button, and status message">
+  <img src="docs/images/settings.png" width="300" align="top" alt="Settings with API key access, editable Text prompt, hotkey, and Save settings">
 </p>
 
 ## Start in 3 steps
 
 1. Download **ClickIt-v1.0.1.zip** from the [latest GitHub release](https://github.com/YoYo-XYZ/ClickIt/releases/latest) and extract it.
 2. In `chrome://extensions`, enable **Developer mode**. Click **Load unpacked** and select the extracted folder containing `manifest.json`.
-3. Open ClickIt, review the data-sharing disclosure, and choose **Start free trial**. To use your own provider key, open **Settings**, choose **Advanced · your API key**, select your provider, enter its key, accept the disclosure, and save.
+3. Open Clickit, review the data-sharing disclosure, and choose **Start free trial**. To use your own provider key, open **Settings**, choose **Advanced · your API key**, select your provider, enter its key, accept the disclosure, and save.
 
 ## Use it
 
 - **Text** reads the page. **Vision** reads a screenshot. Keep the question and choices visible.
 - Press **Answer** for each question. Click highlights yourself. Submit manually if needed.
 - Use **Alt+Shift+A** to answer with the popup closed, using your saved Text or Vision mode. On macOS, use **Option+Shift+A**. Chrome may leave the shortcut unassigned if it conflicts. Check the actual **Answer hotkey** in Settings and click its green shortcut button to change or remove it in Chrome. Existing installations may keep their previous assignment.
-- The toolbar badge shows `…` while answering, `✓` after selection, `!` when action is needed, or `ERR` on failure. Hover for status or open ClickIt for details.
+- The toolbar badge shows `…` while answering, `✓` after selection, `!` when action is needed, or `ERR` on failure. Hover for status or open Clickit for details.
 - Edit prompts in **Settings**. **Reset** restores the default.
 
 ## Update without reinstalling
 
-Update the same folder, then click **Reload** on ClickIt in `chrome://extensions`.
+Update the same folder, then click **Reload** on Clickit in `chrome://extensions`.
 
 Hosted mode uses credits. Advanced API-key mode is billed by your provider. Vision sends the visible tab screenshot. Answers can be wrong.
 

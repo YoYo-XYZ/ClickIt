@@ -27,7 +27,7 @@ test('public pages fit desktop/mobile, show only real install links, and sample 
     for (const name of ['','privacy.html','terms.html','purchase.html','demo.html']) {
       await page.goto(`https://clickit.example/${name}`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}: ${name}`);
-      assert.ok((await page.title()).includes('ClickIt'));
+      assert.ok((await page.title()).includes('Clickit'));
       if (!name) {
         assert.equal(await page.locator('[data-install]').isHidden(), true);
         const pricing=await page.locator('#pricing').textContent();

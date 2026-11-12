@@ -1,8 +1,8 @@
-# ClickIt agent guide
+# Clickit agent guide
 
 ## Project focus
 
-ClickIt is a Chrome Manifest V3 extension that answers one visible single-choice quiz question per user action. Prioritize the extension's accuracy, reliability, and simple popup/settings experience.
+Clickit is a Chrome Manifest V3 extension that answers one visible single-choice quiz question per user action. Prioritize the extension's accuracy, reliability, and simple popup/settings experience.
 
 - `extension/background.js` coordinates answering, hotkeys, status, and cancellation.
 - `extension/content.js` detects Text questions and selects page controls.

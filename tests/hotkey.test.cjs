@@ -132,7 +132,7 @@ test('navigation clears feedback and aborts an active command without restoring 
   assert.equal(app.inspect('statuses.has(7)'), false);
   assert.equal(app.inspect('jobs.size'), 0);
   assert.equal(app.badges.get(7), '');
-  assert.equal(app.titles.get(7), 'ClickIt');
+  assert.equal(app.titles.get(7), 'Clickit');
   assert.equal(app.calls.length, 0);
 });
 

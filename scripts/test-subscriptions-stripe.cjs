@@ -26,11 +26,11 @@ test('Stripe test-clock subscription lifecycle against the actual pinned API', {
     return body;
   }
   const saved=fs.existsSync(output)?JSON.parse(fs.readFileSync(output,'utf8')):null;
-  const product=saved?null:await api('products',{name:`ClickIt subscription validation ${run}`});
+  const product=saved?null:await api('products',{name:`Clickit subscription validation ${run}`});
   const basic=saved?await api(`prices/${saved.basicPriceId}`):await api('prices',{product:product.id,currency:'usd',unit_amount:'499','recurring[interval]':'month',tax_behavior:'exclusive'});
   const plus=saved?await api(`prices/${saved.plusPriceId}`):await api('prices',{product:product.id,currency:'usd',unit_amount:'999','recurring[interval]':'month',tax_behavior:'exclusive'});
   const portal=saved?await api(`billing_portal/configurations/${saved.portalConfigurationId}`):await api('billing_portal/configurations',{
-    'business_profile[headline]':'Manage ClickIt test billing',
+    'business_profile[headline]':'Manage Clickit test billing',
     'features[subscription_cancel][enabled]':'true','features[subscription_cancel][mode]':'at_period_end',
     'features[subscription_update][enabled]':'false','features[payment_method_update][enabled]':'true','features[invoice_history][enabled]':'true',
     default_return_url:'https://clickit.example/purchase.html'
@@ -70,7 +70,7 @@ test('Stripe test-clock subscription lifecycle against the actual pinned API', {
     s.advance(time*1000-s.time());
   }
   const frozen=Math.floor(s.time()/1000);
-  const clock=await api('test_helpers/test_clocks',{frozen_time:String(frozen),name:`ClickIt ${run}`});
+  const clock=await api('test_helpers/test_clocks',{frozen_time:String(frozen),name:`Clickit ${run}`});
   t.after(async()=>{await api(`test_helpers/test_clocks/${clock.id}`,undefined,'DELETE');});
   const user=await s.register();
   const customer=await api('customers',{test_clock:clock.id,'metadata[clickit_installation]':user.installationId});

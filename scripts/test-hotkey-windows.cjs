@@ -30,18 +30,18 @@ async function main() {
     const editor = await context.newPage();
     await editor.goto('chrome://extensions/shortcuts');
     const command = editor.locator('.command-entry').filter({ hasText: 'Answer the current question' });
-    await command.getByRole('button', { name: 'Edit shortcut Answer the current question for ClickIt' }).click();
+    await command.getByRole('button', { name: 'Edit shortcut Answer the current question for Clickit' }).click();
     await editor.keyboard.press('Control+Shift+Y');
     assert.equal(await worker.evaluate(async () => (await chrome.commands.getAll()).find(c => c.name === 'answer-question').shortcut), 'Ctrl+Shift+Y');
 
     const quiz = await context.newPage();
-    const fixture = '<title>ClickIt native hotkey verification</title><main><h1>What is 2 + 2?</h1><div><button class="option">3</button><button class="option">4</button></div><button id="submit">Submit</button></main><script>window.clicks=[];window.submits=0;document.addEventListener("click",e=>{if(e.target.matches(".option"))clicks.push(e.target.textContent);if(e.target.id==="submit")submits++});</script>';
+    const fixture = '<title>Clickit native hotkey verification</title><main><h1>What is 2 + 2?</h1><div><button class="option">3</button><button class="option">4</button></div><button id="submit">Submit</button></main><script>window.clicks=[];window.submits=0;document.addEventListener("click",e=>{if(e.target.matches(".option"))clicks.push(e.target.textContent);if(e.target.id==="submit")submits++});</script>';
     await quiz.route('https://quiz.example/**', route => route.fulfill({ contentType: 'text/html', body: fixture }));
     await quiz.goto('https://quiz.example/text');
     const press = async (twice = false) => {
       await quiz.bringToFront();
       execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-        "$hotkeyShell = New-Object -ComObject WScript.Shell; if (-not $hotkeyShell.AppActivate('ClickIt native hotkey verification')) { throw 'Cannot focus test browser' }; " +
+        "$hotkeyShell = New-Object -ComObject WScript.Shell; if (-not $hotkeyShell.AppActivate('Clickit native hotkey verification')) { throw 'Cannot focus test browser' }; " +
         `$hotkeyShell.SendKeys('${twice ? '^+y^+y' : '^+y'}')`]);
     };
     await press(true);
@@ -54,7 +54,7 @@ async function main() {
     // A new document must receive activeTab access from the command itself.
     await quiz.unroute('https://quiz.example/**');
     await quiz.route('https://quiz.example/**', route => route.fulfill({ contentType: 'text/html',
-      body: '<title>ClickIt native hotkey verification</title>' + require('../tests/fixtures/vision.cjs') }));
+      body: '<title>Clickit native hotkey verification</title>' + require('../tests/fixtures/vision.cjs') }));
     await quiz.goto('https://quiz.example/vision');
     const body = await quiz.evaluate(() => {
       const scale = Math.min(1, 1568 / (innerWidth * devicePixelRatio), 1568 / (innerHeight * devicePixelRatio));
@@ -88,7 +88,7 @@ async function main() {
     await controls.locator('#settingsToggle').click();
     await controls.waitForFunction(() => document.getElementById('hotkeyValue').textContent === 'Ctrl+Shift+Y');
     await editor.bringToFront();
-    await command.getByRole('button', { name: 'Edit shortcut Answer the current question for ClickIt' }).click();
+    await command.getByRole('button', { name: 'Edit shortcut Answer the current question for Clickit' }).click();
     await command.locator('#clear').click();
     await controls.locator('#settingsToggle').click();
     await controls.locator('#settingsToggle').click();

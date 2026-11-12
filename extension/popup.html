@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ClickIt</title><link rel="stylesheet" href="popup.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Clickit</title><link rel="stylesheet" href="popup.css"></head>
 <body>
   <header class="brand">
     <span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 4 13 8-6 1-3 6z"/></svg></span>
-    <h1>ClickIt</h1>
+    <h1>Clickit</h1>
     <p id="answerShortcut" class="shortcut-hint"></p>
     <button id="settingsToggle" type="button" aria-label="Settings" title="Settings" aria-controls="settingsPanel" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
   </header>
@@ -30,7 +30,7 @@
     <form id="settings">
       <fieldset id="billingMode" class="billing-mode" aria-label="AI access">
         <div class="billing-mode-options">
-          <label class="mode-option"><input type="radio" name="billingMode" value="hosted" checked><span>ClickIt</span></label>
+          <label class="mode-option"><input type="radio" name="billingMode" value="hosted" checked><span>Clickit</span></label>
           <label class="mode-option"><input type="radio" name="billingMode" value="byok"><span>Your API key</span></label>
         </div>
         <section id="hostedPanel" aria-label="AI credits">
@@ -38,8 +38,8 @@
           <p id="creditBreakdown" hidden></p>
           <p id="creditNote">Then Basic $4.99/month or Plus $9.99/month. No card required to try.</p>
           <div id="trialConsent">
-            <label class="consent"><input id="adultConsent" type="checkbox">I am 18 or older and use ClickIt for casual quizzes.</label>
-            <label class="consent"><input id="dataConsent" type="checkbox">I consent to ClickIt, OpenRouter and TypeSafe processing quiz text or visible-tab screenshots, which may include personal data, for answers.</label>
+            <label class="consent"><input id="adultConsent" type="checkbox">I am 18 or older and use Clickit for casual quizzes.</label>
+            <label class="consent"><input id="dataConsent" type="checkbox">I consent to Clickit, OpenRouter and TypeSafe processing quiz text or visible-tab screenshots, which may include personal data, for answers.</label>
             <button id="startTrial" type="button">Start free trial</button>
           </div>
           <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan</label><select id="subscriptionPlan"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" type="button">Subscribe</button><p>Renews automatically. Monthly credits expire at renewal. See your total before subscribing.</p></div>
@@ -65,7 +65,7 @@
           <input id="apiKey" type="password" aria-label="API Key" autocomplete="off" placeholder="Paste your API key">
         </div>
       </div>
-      <label class="consent"><input id="byokConsent" type="checkbox"><span>I'm 18+ and accept the <a href="https://clickit.thammatorn-clickit.workers.dev/terms.html" target="_blank" rel="noreferrer">Terms</a>. See the <a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">ClickIt</a>, <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter</a>, and <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy policies</a>.</span></label>
+      <label class="consent"><input id="byokConsent" type="checkbox"><span>I'm 18+ and accept the <a href="https://clickit.thammatorn-clickit.workers.dev/terms.html" target="_blank" rel="noreferrer">Terms</a>. See the <a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Clickit</a>, <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter</a>, and <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy policies</a>.</span></label>
       </details>
       <div class="prompt-field" id="promptSettings">
         <div class="prompt-heading"><label id="promptLabel" for="textPrompt">Text prompt</label><button id="resetPrompt" type="button">Reset</button></div>

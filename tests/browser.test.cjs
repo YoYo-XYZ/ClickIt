@@ -130,9 +130,9 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
     assert.equal(await controls.getByText('Data sharing details', { exact: true }).count(), 0);
     const consent = controls.locator('label').filter({ has: controls.locator('#byokConsent') });
-    assert.match(await consent.textContent(), /I'm 18\+ and accept the Terms\. See the ClickIt, OpenRouter, and TypeSafe privacy policies\./);
+    assert.match(await consent.textContent(), /I'm 18\+ and accept the Terms\. See the Clickit, OpenRouter, and TypeSafe privacy policies\./);
     assert.equal(await controls.locator('#byokDisclosure').count(), 0);
-    for (const name of ['ClickIt', 'Terms', 'OpenRouter', 'TypeSafe privacy policies']) {
+    for (const name of ['Clickit', 'Terms', 'OpenRouter', 'TypeSafe privacy policies']) {
       assert.equal(await consent.getByRole('link', { name, exact: true }).isVisible(), true);
     }
     await controls.locator('#byokConsent').check();
@@ -426,7 +426,7 @@ test('AI access segments support keyboard switching and persist the selected bil
   const controls = await popup();
   try {
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
-    const included = controls.getByRole('radio', { name: 'ClickIt', exact: true });
+    const included = controls.getByRole('radio', { name: 'Clickit', exact: true });
     const ownKey = controls.getByRole('radio', { name: 'Your API key', exact: true });
     assert.equal(await ownKey.isChecked(), true);
     await ownKey.focus();
@@ -466,7 +466,7 @@ test('API key settings collapse by default and toggle with the keyboard without 
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
     assert.equal(await controls.locator('#byokConsent').isChecked(), true);
-    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'ClickIt', exact: true }).isVisible(), true);
+    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'Clickit', exact: true }).isVisible(), true);
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), false);
     assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'OpenRouter', exact: true }).isVisible(), false);
@@ -497,7 +497,7 @@ test('hotkey settings show actual assignments in both billing modes and open Chr
       await controls.locator('#changeShortcut').click();
       assert.equal(await controls.evaluate(() => shortcutPage), 'chrome://extensions/shortcuts');
       await controls.locator('#settingsToggle').click();
-      assert.equal(await controls.locator('#answerShortcut').textContent(), shortcut ? 'Alt+Shift+Y to ClickIt' : 'Set an answer hotkey in Settings');
+      assert.equal(await controls.locator('#answerShortcut').textContent(), shortcut ? 'Alt+Shift+Y to Clickit' : 'Set an answer hotkey in Settings');
     }
   } finally { await controls.close(); }
 });

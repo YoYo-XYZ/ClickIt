@@ -18,11 +18,11 @@ async function clearSuggestion(tabId) {
   if (target) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
 }
 
-function toolbar(tabId, badge = '', text = 'ClickIt') {
+function toolbar(tabId, badge = '', text = 'Clickit') {
   void Promise.all([
     chrome.action.setBadgeText({ tabId, text: badge }),
     chrome.action.setBadgeBackgroundColor({ tabId, color: badge === 'ERR' ? '#a83232' : '#285b49' }),
-    chrome.action.setTitle({ tabId, title: text === 'ClickIt' ? text : `ClickIt: ${text}` })
+    chrome.action.setTitle({ tabId, title: text === 'Clickit' ? text : `Clickit: ${text}` })
   ]).catch(() => {}); // The tab may have closed.
 }
 
@@ -165,7 +165,7 @@ async function run(tabId, job, config) {
     }
   } catch (error) {
     report({ text: job.controller.signal.aborted ? job.controller.signal.reason?.message || 'Request expired or was cancelled. Press Answer to retry.' :
-      error instanceof TypeError ? `Cannot reach ${config.billingMode === 'hosted' ? 'ClickIt' : C.providers[config.provider].name}. Check your connection and press Answer.` : error.message }, 'ERR');
+      error instanceof TypeError ? `Cannot reach ${config.billingMode === 'hosted' ? 'Clickit' : C.providers[config.provider].name}. Check your connection and press Answer.` : error.message }, 'ERR');
   } finally {
     if (!delivered && job.hostedRequestId) await ClickItHosted.complete(job, false).catch(() => {});
     if (target && !suggested) await chrome.scripting.executeScript({ target, func: () => globalThis.ClickItPage?.cancel() }).catch(() => {});
