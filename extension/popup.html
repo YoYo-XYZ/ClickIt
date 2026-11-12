@@ -41,14 +41,13 @@
         </div>
         <section id="hostedPanel" aria-label="AI credits">
           <div class="credit-heading"><strong id="creditBalance">15 free answers</strong><button id="refreshBalance" type="button">Refresh</button></div>
-          <p id="creditBreakdown" hidden></p>
           <p id="creditNote">No card required. No automatic subscription.</p>
           <div id="trialConsent">
             <label class="consent"><input id="adultConsent" type="checkbox">I'm 18+ and use Clickit for casual quizzes.</label>
             <label class="consent"><input id="dataConsent" type="checkbox">I consent to sharing quiz text or visible-tab screenshots with Clickit, OpenRouter and TypeSafe for answers. They may contain personal data.</label>
             <button id="startTrial" class="primary" type="button">Try 15 free answers</button>
           </div>
-          <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan · USD</label><select id="subscriptionPlan" aria-describedby="planTerms"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" class="primary" type="button">Continue to checkout</button><p id="planTerms" class="hint">Renews monthly until canceled. Unused monthly credits expire at renewal. Review your total on Stripe before paying.</p><p class="hint">1 credit per valid suggestion, even if wrong. Failed requests are free.</p></div>
+          <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan · USD</label><select id="subscriptionPlan"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" class="primary" type="button">Continue to checkout</button></div>
           <div id="subscriptionActions" hidden>
             <button id="upgradePlan" type="button" hidden>Upgrade to Plus</button>
             <button id="manageSubscription" type="button">Manage billing</button>

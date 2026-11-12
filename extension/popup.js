@@ -93,8 +93,6 @@ function showCredits() {
   $('cancelSubscription').hidden = !live || sub.cancelAtPeriodEnd;
   $('resumeSubscription').hidden = !live || !sub.cancelAtPeriodEnd;
   $('creditBalance').textContent = hosted.registered ? value ? `${value.credits} credits left` : 'Balance unavailable' : hosted.configured ? '15 free answers' : 'Connect your API key';
-  $('creditBreakdown').hidden = !hosted.registered || value?.monthlyCredits === undefined;
-  $('creditBreakdown').textContent = `${value?.monthlyCredits ?? 0} monthly credits${value?.otherCredits ? ` · ${value.otherCredits} other credits` : ''}`;
   const date = sub ? new Date(sub.periodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
   const planName = sub?.planId === 'plus' ? 'Plus' : 'Basic';
   $('creditNote').textContent = hosted.registered ? (
