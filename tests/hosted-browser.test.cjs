@@ -338,6 +338,15 @@ test('reopening the popup can retry a lost billing response using the original c
 test('payment problems offer billing recovery instead of another plan change', async () => {
   const controls = await popup();
   try {
+    const divider = controls.locator('.account-divider');
+    const account = controls.locator('#accountEntry');
+    const dividerBounds = await divider.boundingBox();
+    const accountBounds = await account.boundingBox();
+    assert.ok(dividerBounds.y + dividerBounds.height < accountBounds.y);
+    await divider.click();
+    assert.equal(await controls.locator('#settingsPanel').isHidden(), true);
+    await controls.mouse.click(accountBounds.x + 10, accountBounds.y - 5);
+    assert.equal(await controls.locator('#settingsPanel').isHidden(), true);
     await controls.locator('#accountEntry').click();
     const subscription = { planId: 'basic', status: 'active', allowance: 500, periodEnd: Date.now()+86400000, cancelAtPeriodEnd: false };
     for (const state of [

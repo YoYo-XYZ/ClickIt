@@ -50,7 +50,8 @@ fieldset:disabled .mode-option { cursor: default; opacity: .55; }
 .status p { font-size: 12px; overflow-wrap: anywhere; }
 .status[data-kind="error"] { padding-left: 10px; border-left: 2px solid #f2a89f; color: #ffd1cb; }
 #timing { margin-top: 4px; font-size: 11px; }
-.account-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; margin-top: 20px; padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; text-align: left; font-size: 12px; }
+.account-divider { margin-top: 20px; border-top: 1px solid var(--line); }
+.account-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; margin-top: 14px; padding: 0; min-height: 22px; border: 0; border-radius: 0; background: transparent; text-align: left; font-size: 12px; }
 .account-entry:hover:not(:disabled) { background: transparent; }
 #accountAction { color: var(--accent); text-align: right; }
 body:has(#settingsPanel:not([hidden])) #answerPanel, body:has(#settingsPanel:not([hidden])) .shortcut-hint { display: none; }
