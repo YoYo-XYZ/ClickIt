@@ -124,7 +124,6 @@ test('API-key users must explicitly accept disclosure before answering, and chan
     assert.match(reply.error, /data sharing disclosure/);
     assert.equal((await calls()).length, 0);
     assert.equal(await worker.evaluate(() => captures.length), 0);
-    await controls.evaluate(() => { document.getElementById('byokSettings').open = false; });
     await controls.locator('#answerNow').click();
     await controls.locator('#byokConsent').waitFor({ state: 'visible' });
     assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -450,30 +449,24 @@ test('AI access segments support keyboard switching and persist the selected bil
     await controls.keyboard.press('ArrowRight');
     assert.equal(await ownKey.isChecked(), true);
     assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
-    await controls.locator('#byokSettings > summary').click();
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
     assert.equal(await controls.locator('#apiKey').inputValue(), 'fake-test-key');
     assert.equal((await calls()).length, 0);
   } finally { await controls.close(); }
 });
 
-test('API key settings collapse by default and toggle with the keyboard without losing credentials or consent', async () => {
+test('API key settings remain visible with saved credentials and consent', async () => {
   await configure();
   const controls = await popup();
   try {
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
-    const summary = controls.locator('#byokSettings > summary');
-    assert.equal(await summary.isVisible(), true);
-    assert.equal(await controls.locator('#apiKey').isVisible(), false);
-    assert.equal(await controls.locator('#byokConsent').isVisible(), false);
-    await summary.focus();
-    await controls.keyboard.press('Enter');
+    assert.equal(await controls.getByRole('heading', { name: 'API key', exact: true }).isVisible(), true);
+    assert.equal(await controls.locator('#provider').isVisible(), true);
     assert.equal(await controls.locator('#apiKey').isVisible(), true);
+    assert.equal(await controls.locator('#byokConsent').isVisible(), true);
     assert.equal(await controls.locator('#byokConsent').isChecked(), true);
     assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'Clickit', exact: true }).isVisible(), true);
-    await controls.keyboard.press('Enter');
-    assert.equal(await controls.locator('#apiKey').isVisible(), false);
-    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'OpenRouter', exact: true }).isVisible(), false);
+    assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'OpenRouter', exact: true }).isVisible(), true);
     await finishEditing(controls);
     assert.equal(await worker.evaluate(() => settings.apiKey), 'fake-test-key');
     assert.equal(await worker.evaluate(() => settings.byokConsent), true);

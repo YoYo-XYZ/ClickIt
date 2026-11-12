@@ -87,6 +87,7 @@ input:not([type="checkbox"]):not([type="radio"]), select, textarea { width: 100%
 details > summary { padding-block: 12px; font-size: 13px; color: #edf3f5; }
 details[open] > summary { margin-bottom: 4px; }
 .api-key-settings { margin-top: 16px; }
+.api-key-settings h2 { padding-block: 12px; margin-bottom: 4px; font-size: 13px; font-weight: normal; color: #edf3f5; }
 .api-credentials-controls { display: grid; gap: 8px; }
 .hotkey-settings { margin-top: 20px; padding: 14px 0; border-block: 1px solid var(--line); }
 .hotkey-heading { color: var(--muted); font-size: 12px; }

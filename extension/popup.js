@@ -72,7 +72,6 @@ async function withAction(action) {
 function showBilling() {
   const byok = selectedBillingMode() === 'byok';
   $('byokSettings').hidden = !byok;
-  if (byok && (!$('apiKey').value.trim() || !$('byokConsent').checked)) $('byokSettings').open = true;
   $('hostedPanel').hidden = byok;
 }
 function showCredits() {
@@ -252,10 +251,10 @@ $('answerNow').addEventListener('click', async () => {
       await send({ type: 'answer' });
       await refresh();
     } catch (error) {
-      if (error.message.includes('API key')) { showSettings(true); $('byokSettings').open = true; focusAfterAction = $('apiKey'); }
+      if (error.message.includes('API key')) { showSettings(true); focusAfterAction = $('apiKey'); }
       if (error.message.includes('free trial')) { showSettings(true); focusAfterAction = $('adultConsent'); }
       if (error.message.includes('data sharing')) {
-        if (saved.billingMode === 'byok') { showSettings(true); $('byokSettings').open = true; focusAfterAction = $('byokConsent'); }
+        if (saved.billingMode === 'byok') { showSettings(true); focusAfterAction = $('byokConsent'); }
         else { showSettings(true); focusAfterAction = $('dataConsent'); }
       }
       throw error;
