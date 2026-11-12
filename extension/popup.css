@@ -95,15 +95,12 @@ details[open] > summary { margin-bottom: 4px; }
 #hotkeyValue { font: inherit; }
 #changeShortcut { min-height: 32px; padding: 5px 8px; font-size: 12px; }
 #hotkeyError { margin-top: 8px; font-size: 12px; color: #ffd1cb; }
-.prompt-settings { border-bottom: 1px solid var(--line); }
 #promptMode { margin: 4px 0 12px; }
 .prompt-heading { margin-bottom: 6px; }
 .prompt-heading label { margin: 0; }
 textarea { line-height: 1.5; resize: vertical; }
 .prompt-field { margin-bottom: 14px; }
-.settings-footer { position: sticky; bottom: 0; padding: 12px 0; background: #111820; }
-#saveSettings { width: 100%; }
-#accessRecovery { margin-top: 4px; border-top: 1px solid var(--line); }
+#accessRecovery { border-top: 1px solid var(--line); }
 #accessRecovery p { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
 #accessRecovery label { color: var(--muted); font-size: 12px; }
 .key-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 6px 0 10px; }

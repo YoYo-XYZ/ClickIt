@@ -51,7 +51,7 @@ async function popup() {
   const page = await context.newPage();
   await page.setViewportSize({ width: 300, height: 520 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
+  await page.waitForFunction(() => loaded);
   return page;
 }
 
@@ -172,14 +172,14 @@ test('API-key users must explicitly accept disclosure before answering, and chan
       assert.equal(await consent.getByRole('link', { name, exact: true }).isVisible(), true);
     }
     await controls.locator('#byokConsent').check();
-    await controls.locator('#saveSettings').click();
+    await finishEditing(controls);
     await until(() => worker.evaluate(() => settings.byokConsent));
     await start(page, controls);
     assert.equal((await finished(page)).answer, '4');
     await controls.locator('#settingsToggle').click();
     await controls.locator('#provider').selectOption('openrouter');
     assert.equal(await controls.locator('#byokConsent').isChecked(), false);
-    await controls.locator('#saveSettings').click();
+    await finishEditing(controls);
     await until(() => worker.evaluate(() => !settings.byokConsent));
     await controls.reload();
     await controls.locator('#settingsToggle').click();
@@ -408,8 +408,7 @@ test('popup saves lean settings, shows only the latest answer, and keeps it on r
     assert.equal(await controls.locator('.status').isVisible(), false);
     await controls.screenshot({ path: path.resolve(__dirname, '../test-results/popup-settings.png'), fullPage: true });
     assert.equal(await controls.locator('#minConfidence,#timeoutMs').count(), 0);
-    await controls.locator('#saveSettings').click();
-    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    await finishEditing(controls);
     assert.equal(await controls.locator('#settingsPanel').isVisible(), false);
     assert.equal(await controls.locator('#answerNow').isVisible(), true);
     assert.equal(await controls.locator('.status').isVisible(), true);
@@ -473,12 +472,11 @@ test('AI access segments support keyboard switching and persist the selected bil
     assert.equal(await included.isChecked(), true);
     assert.equal(await controls.locator('#hostedPanel').isVisible(), true);
     assert.equal(await controls.locator('#byokSettings').isHidden(), true);
-    await controls.locator('#saveSettings').click();
-    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    await finishEditing(controls);
     assert.equal(await worker.evaluate(() => settings.billingMode), 'hosted');
     assert.equal(await controls.locator('#hostedPanel').isVisible(), false);
     await controls.reload();
-    await controls.waitForFunction(() => !document.getElementById('saveSettings').disabled);
+    await controls.waitForFunction(() => loaded);
     await controls.getByRole('button', { name: 'Settings', exact: true }).click();
     assert.equal(await included.isChecked(), true);
     await included.focus();
@@ -509,8 +507,7 @@ test('API key settings collapse by default and toggle with the keyboard without 
     await controls.keyboard.press('Enter');
     assert.equal(await controls.locator('#apiKey').isVisible(), false);
     assert.equal(await controls.locator('#byokSettings').getByRole('link', { name: 'OpenRouter', exact: true }).isVisible(), false);
-    await controls.locator('#saveSettings').click();
-    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    await finishEditing(controls);
     assert.equal(await worker.evaluate(() => settings.apiKey), 'fake-test-key');
     assert.equal(await worker.evaluate(() => settings.byokConsent), true);
     assert.equal((await calls()).length, 0);
@@ -1051,8 +1048,7 @@ test('saved multiline prompts reach the answer instructions in both modes and pr
       await controls.locator('#promptSettings > summary').click();
       const key = `${mode}Prompt`, prompt = mode === 'text' ? textPrompt : visionPrompt;
       await controls.locator(`#${key}`).fill(prompt);
-      await controls.locator('#saveSettings').click();
-      await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+      await finishEditing(controls);
       const reopened = await popup();
       try { assert.equal(await reopened.locator(`#${key}`).inputValue(), prompt); }
       finally { await reopened.close(); }
@@ -1072,7 +1068,7 @@ test('saved multiline prompts reach the answer instructions in both modes and pr
   }
 });
 
-test('custom prompts stay collapsed until opened across billing modes; Reset restores only the selected prompt and persists after Save', async () => {
+test('custom prompts stay collapsed until opened across billing modes; Reset restores only the selected prompt and saves automatically', async () => {
   for (const billingMode of ['byok', 'hosted']) for (const mode of ['text', 'vision']) {
     await configure({ billingMode, mode, textPrompt: 'Custom text prompt', visionPrompt: 'Custom vision prompt' });
     const controls = await popup();
@@ -1091,8 +1087,7 @@ test('custom prompts stay collapsed until opened across billing modes; Reset res
       assert.equal(await controls.locator(`#${key}`).inputValue(), expected);
       assert.match(await controls.locator(`#${other}`).inputValue(), /^Custom /);
       await controls.screenshot({ path: path.resolve(__dirname, `../test-results/popup-${mode}-prompt.png`), fullPage: true });
-      await controls.locator('#saveSettings').click();
-      await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+      await finishEditing(controls);
       assert.equal(await worker.evaluate(key => settings[key], key), expected);
       const reopened = await popup();
       try {
@@ -1135,9 +1130,8 @@ test('prompt editors switch independently of answer mode and keyboard navigation
     await controls.keyboard.press('ArrowRight');
     assert.equal(await controls.locator('#visionPrompt').isVisible(), true);
     await controls.locator('#visionPrompt').fill('Updated vision instructions');
-    assert.equal(await controls.locator('#saveSettings').textContent(), 'Save settings');
-    await controls.locator('#saveSettings').click();
-    await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+    assert.equal(await controls.locator('#saveSettings').count(), 0);
+    await finishEditing(controls);
     assert.deepEqual(await worker.evaluate(() => [settings.mode, settings.textPrompt, settings.visionPrompt]), ['text', 'Keep my text prompt', 'Updated vision instructions']);
     await controls.locator('#settingsToggle').click();
     await controls.keyboard.press('Escape');
@@ -1156,3 +1150,36 @@ test('prompt editors switch independently of answer mode and keyboard navigation
     assert.equal(repeatedAnnouncements, 0, 'unchanged polling results must not repeat live announcements');
   } finally { await controls.close(); }
 });
+
+test('settings save on field changes without buttons and recover after invalid edits', async () => {
+  await configure({ textPrompt: 'Original instructions' });
+  const controls = await popup();
+  try {
+    await controls.locator('#settingsToggle').click();
+    assert.equal(await controls.locator('#saveSettings, .settings-footer').count(), 0);
+    await controls.locator('#promptSettings > summary').click();
+    await controls.locator('#textPrompt').fill(' ');
+    await controls.locator('#promptLabel').click();
+    await controls.evaluate(() => settingsSave);
+    assert.equal(await controls.locator('#message').getAttribute('role'), 'alert');
+    assert.equal(await worker.evaluate(() => settings.textPrompt), 'Original instructions');
+    await controls.locator('#textPrompt').fill('Automatically saved instructions');
+    await controls.locator('#promptLabel').click();
+    await controls.evaluate(() => settingsSave);
+    assert.equal(await worker.evaluate(() => settings.textPrompt), 'Automatically saved instructions');
+    assert.equal(await controls.locator('#settingsPanel').isVisible(), true);
+    assert.equal(await controls.locator('#message').textContent(), '');
+    await controls.reload();
+    await controls.waitForFunction(() => loaded);
+    assert.equal(await controls.locator('#textPrompt').inputValue(), 'Automatically saved instructions');
+    assert.equal((await calls()).length, 0);
+  } finally { await controls.close(); }
+});
+
+async function finishEditing(controls) {
+  await controls.evaluate(async () => {
+    document.activeElement?.blur();
+    await settingsSave;
+  });
+  if (await controls.locator('#settingsPanel').isVisible()) await controls.locator('#settingsToggle').click();
+}

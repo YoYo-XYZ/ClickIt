@@ -82,7 +82,7 @@ async function popup() {
   const page = await context.newPage();
   await page.setViewportSize({ width: 300, height: 900 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
+  await page.waitForFunction(() => loaded);
   return page;
 }
 async function scenario(action) {
@@ -210,8 +210,7 @@ test('malformed hosted Text and Vision results release the credit without clicki
         await controls.getByRole('button', { name: 'Settings', exact: true }).click();
         await controls.locator('#promptSettings > summary').click();
         await controls.locator(`#${key}`).fill(prompt);
-        await controls.locator('#saveSettings').click();
-        await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+        await finishEditing(controls);
         await quiz.bringToFront();
         assert.equal((await start(controls)).ok, true);
         await finish();
@@ -339,7 +338,7 @@ test('credit and payment states stay actionable at narrow widths and enlarged te
   try {
     await controls.locator('#accountEntry').click();
     assert.equal(await controls.locator('#viewTitle').textContent(), 'Settings');
-    assert.equal(await controls.locator('#saveSettings').textContent(), 'Done');
+    assert.equal(await controls.locator('#saveSettings').count(), 0);
     const subscription = { planId: 'basic', status: 'active', allowance: 500, periodEnd: Date.now()+86400000, cancelAtPeriodEnd: false };
     for (const state of [
       { name: 'empty', credits: 0, checkoutEnabled: true, subscription: null, note: /Choose a plan/, button: 'buyCredits' },
@@ -376,8 +375,7 @@ test('credit and payment states stay actionable at narrow widths and enlarged te
       for (const [node, size] of sizes) node.style.fontSize = `${size*2}px`;
     });
     assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    await controls.locator('#saveSettings').scrollIntoViewIfNeeded();
-    assert.equal(await controls.locator('#saveSettings').isVisible(), true);
+    assert.equal(await controls.locator('#saveSettings, .settings-footer').count(), 0);
     assert.deepEqual(errors, []);
   } finally { await controls.close(); }
 });
@@ -445,3 +443,11 @@ test('unavailable balances never appear as zero credits and access keys re-hide 
     assert.equal(await controls.locator('#showAccessKey').getAttribute('aria-pressed'), 'false');
   } finally { await controls.close(); }
 });
+
+async function finishEditing(controls) {
+  await controls.evaluate(async () => {
+    document.activeElement?.blur();
+    await settingsSave;
+  });
+  if (await controls.locator('#settingsPanel').isVisible()) await controls.locator('#settingsToggle').click();
+}

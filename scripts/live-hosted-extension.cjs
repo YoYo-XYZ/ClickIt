@@ -41,7 +41,7 @@ async function main() {
     await session.send('Extensions.triggerAction', { id, targetId: targetInfos.find(target => target.url === page.url()).targetId });
     const popup = await context.newPage();
     await popup.goto(`chrome-extension://${id}/popup.html`);
-    await popup.waitForFunction(() => !document.getElementById('saveSettings').disabled);
+    await popup.waitForFunction(() => loaded);
     for (const mode of ['text', 'vision']) {
       await page.goto('https://quiz.example/hosted-validation');
       if (mode === 'text') await page.evaluate(() => {

@@ -4,6 +4,7 @@ let saved;
 let hosted;
 let upgradeQuote = null;
 let modeSave = null;
+let settingsSave = Promise.resolve();
 let focusAfterAction = null;
 function setText(id, text) {
   if ($(id).textContent !== text) $(id).textContent = text;
@@ -36,12 +37,6 @@ function controls() {
   $('answerLabel').textContent = label;
   $('answerNow').setAttribute('aria-label', label);
   $('answerNow').setAttribute('aria-busy', String(running));
-  const dirty = saved && Object.keys(ClickIt.defaults).some(key => {
-    const value = key === 'mode' ? selectedMode() : key === 'billingMode' ? selectedBillingMode() : $(key)?.type === 'checkbox' ? $(key).checked : ($(key)?.value ?? saved[key]);
-    return value !== saved[key];
-  });
-  $('saveSettings').textContent = dirty ? 'Save settings' : 'Done';
-  $('saveSettings').classList.toggle('primary', Boolean(dirty));
   $('startTrial').disabled ||= !hosted?.configured || !$('adultConsent').checked || !$('dataConsent').checked;
   const billingBlocked = Boolean(hosted?.billingOperationPending);
   $('buyCredits').disabled ||= !hosted?.balance?.checkoutEnabled || billingBlocked;
@@ -136,7 +131,7 @@ function showPrompt() {
 $('resetPrompt').addEventListener('click', () => {
   const key = `${document.querySelector('input[name="promptMode"]:checked').value}Prompt`;
   $(key).value = ClickIt.defaults[key];
-  controls();
+  void saveSettings();
 });
 function showSettings(open) {
   $('settingsPanel').hidden = !open;
@@ -214,6 +209,7 @@ $('provider').addEventListener('change', () => { $('byokConsent').checked = fals
 $('billingMode').addEventListener('change', showBilling);
 $('settings').addEventListener('input', controls);
 async function saveMode() {
+  await settingsSave;
   while (selectedMode() !== saved.mode) {
     const mode = selectedMode();
     try {
@@ -235,19 +231,28 @@ $('mode').addEventListener('change', () => {
   showPrompt();
   if (!modeSave) modeSave = saveMode().finally(() => { modeSave = null; });
 });
-$('settings').addEventListener('submit', async event => {
-  event.preventDefault();
-  await withAction(async () => {
-    const settings = ClickIt.validateSettings(Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key,
-      key === 'mode' ? selectedMode() : key === 'billingMode' ? selectedBillingMode() : $(key)?.type === 'checkbox' ? $(key).checked : ($(key)?.value ?? saved[key])])));
+function saveSettings() {
+  if (!loaded) return settingsSave;
+  const values = Object.fromEntries(Object.keys(ClickIt.defaults).map(key => [key,
+    key === 'mode' ? selectedMode() : key === 'billingMode' ? selectedBillingMode() : $(key)?.type === 'checkbox' ? $(key).checked : ($(key)?.value ?? saved[key])]));
+  const pendingMode = modeSave;
+  settingsSave = settingsSave.then(async () => {
+    await pendingMode;
+    const settings = ClickIt.validateSettings({ ...values, mode: saved.mode });
     await send({ type: 'save', settings });
     saved = settings;
-    $('apiKey').value = settings.apiKey;
-    $('message').textContent = 'Saved.';
-    showSettings(false);
+    notice('');
     showBilling();
     showCredits();
-  });
+  }).catch(error => notice(error.message, true));
+  return settingsSave;
+}
+$('settings').addEventListener('change', event => {
+  if (Object.hasOwn(ClickIt.defaults, event.target.id) || event.target.name === 'billingMode') void saveSettings();
+});
+$('settings').addEventListener('submit', event => {
+  event.preventDefault();
+  void saveSettings();
 });
 $('answerNow').addEventListener('click', async () => {
   await withAction(async () => {
