@@ -175,8 +175,6 @@ async function refresh(initial = false) {
     $('status').setAttribute('role', data.status.kind === 'error' ? 'alert' : 'status');
     setText('status', data.status.text);
     const action = data.status.lastAction;
-    setText('answer', action?.answer || 'No answer yet');
-    $('answerResult').hidden = !action?.answer || running || data.status.kind === 'error';
     $('timing').textContent = action ? `${(action.totalMs / 1000).toFixed(1)} s` : '';
     if (initial) {
       saved = data.settings;

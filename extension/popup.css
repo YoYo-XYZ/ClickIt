@@ -44,8 +44,6 @@ fieldset:disabled .mode-option { cursor: default; opacity: .55; }
 #modeHint { min-height: 18px; margin: 8px 0 14px; }
 #answerNow { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; font-size: 17px; }
 .answer-icon svg { stroke-width: 2.4; }
-#answerResult { display: grid; gap: 4px; margin-top: 18px; }
-#answer { font-size: 20px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
 .status { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; color: var(--muted); }
 .status > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; }
 .status > div { min-width: 0; }

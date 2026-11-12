@@ -232,7 +232,7 @@ test('missing, ambiguous, multi-select, typed, image-only, and disabled question
       assert.match(result.text, /unsupported|Multiple|ambiguous|disabled/);
       await controls.evaluate(() => refresh());
       assert.equal(await controls.locator('#status').getAttribute('role'), 'alert');
-      assert.equal(await controls.locator('#answerResult').isHidden(), true);
+      assert.equal(await controls.locator('#answerResult').count(), 0);
       assert.equal((await calls()).length, 0);
     });
   }
@@ -362,7 +362,7 @@ test('authentication errors do not echo provider response bodies or secrets', as
   });
 });
 
-test('popup saves lean settings, shows only the latest answer, and keeps it on reopening', async () => {
+test('popup saves lean settings and reopens without answer history', async () => {
   await configure({ minConfidence: 0.3, timeoutMs: 5000 });
   await scenario(fixture, async (page, controls) => {
     assert.equal(await controls.locator('#autopilot,#answerBank').count(), 0);
@@ -389,8 +389,7 @@ test('popup saves lean settings, shows only the latest answer, and keeps it on r
     const reopened = await popup();
     try {
       await page.bringToFront();
-      await reopened.waitForFunction(() => document.getElementById('answer').textContent === '6');
-      assert.equal(await reopened.locator('#answerResult strong').count(), 1);
+      assert.equal(await reopened.locator('#answerResult').count(), 0);
       await reopened.screenshot({ path: path.resolve(__dirname, '../test-results/popup.png'), fullPage: true });
     } finally { await reopened.close(); }
   });
