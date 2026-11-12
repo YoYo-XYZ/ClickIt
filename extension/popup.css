@@ -83,7 +83,8 @@ textarea { width: 100%; padding: 10px; border: 1px solid #35414f; border-radius:
 #creditBalance { font-size: 18px; }
 .trial-highlight { color: #9becce; }
 #hostedPanel p, #accessRecovery p { font-size: 12px; line-height: 1.5; color: #b7c3d2; margin: 8px 0; }
-.plan-badge { padding: 1px 6px; border-radius: 999px; background: #9becce; color: #15372e; font-weight: 650; white-space: nowrap; }
+.plan-badge { padding: 1px 6px; border-radius: 999px; background: #283d38; color: #9becce; font-weight: 650; white-space: nowrap; }
+.plan-badge-basic { background: #35414f; color: #edf3f5; }
 #creditError:empty { display: none; }
 .consent { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; margin-top: 10px; }
 .consent input { width: auto; margin-top: 3px; padding: 0; flex: 0 0 auto; }

@@ -94,7 +94,7 @@ function showCredits() {
   note.replaceChildren(...note.textContent.split(/\b(Basic|Plus)\b/).map(part => {
     if (part !== 'Basic' && part !== 'Plus') return document.createTextNode(part);
     const badge = document.createElement('span');
-    badge.className = 'plan-badge';
+    badge.className = part === 'Basic' ? 'plan-badge plan-badge-basic' : 'plan-badge';
     badge.textContent = part;
     return badge;
   }));
