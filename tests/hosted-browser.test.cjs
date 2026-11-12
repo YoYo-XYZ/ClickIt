@@ -80,9 +80,9 @@ after(async () => {
 });
 async function popup() {
   const page = await context.newPage();
-  await page.setViewportSize({ width: 360, height: 900 });
+  await page.setViewportSize({ width: 300, height: 900 });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await page.waitForFunction(() => !document.getElementById('saveSettings').disabled);
+  await page.waitForFunction(() => loaded);
   return page;
 }
 async function scenario(action) {
@@ -127,6 +127,8 @@ test('new hosted installations ask for consent and never send an API request jus
     await controls.locator('#dataConsent').check();
     await controls.locator('#startTrial').click();
     await until(() => controls.locator('#trialConsent').isHidden());
+    assert.equal(await controls.locator('#settingsPanel').isHidden(), true);
+    assert.equal(await controls.locator('#answerNow').isVisible(), true);
     assert.equal(await controls.locator('#creditBalance').textContent(), '15 credits left');
     const calls = await worker.evaluate(() => hostedCalls);
     assert.equal(calls[0].body.adultConsent, true);
@@ -206,9 +208,9 @@ test('malformed hosted Text and Vision results release the credit without clicki
       await scenario(async (quiz, controls) => {
         const key = `${mode}Prompt`, prompt = `Custom ${mode} instructions.\nChoose the best answer.`;
         await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+        await controls.locator('#promptSettings > summary').click();
         await controls.locator(`#${key}`).fill(prompt);
-        await controls.getByRole('button', { name: 'Save settings' }).click();
-        await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
+        await finishEditing(controls);
         await quiz.bringToFront();
         assert.equal((await start(controls)).ok, true);
         await finish();
@@ -255,8 +257,11 @@ test('subscription selection opens only hosted Stripe checkout, and restore vali
     assert.equal((await worker.evaluate(() => hostedCalls.find(c => c.route === '/v1/checkout'))).body.planId, 'plus');
     await controls.locator('#accessRecovery summary').click();
     assert.equal(await controls.locator('#hostedAccessKey').inputValue(), token);
+    await controls.locator('#showAccessKey').click();
     await controls.locator('#restoreAccess').click();
     await until(async () => (await controls.locator('#message').textContent()).includes('restored'));
+    assert.equal(await controls.locator('#hostedAccessKey').getAttribute('type'), 'password');
+    assert.equal(await controls.locator('#showAccessKey').getAttribute('aria-pressed'), 'false');
     await controls.locator('body').screenshot({ path: path.resolve(__dirname, '../test-results/hosted-settings.png') });
   } finally { await controls.close(); }
 });
@@ -275,6 +280,13 @@ test('subscription controls preview upgrades before charging and manage renewals
     await controls.locator('#upgradePlan').click();
     await controls.locator('#upgradeQuote').waitFor({ state:'visible' });
     assert.match(await controls.locator('#upgradeQuoteText').textContent(), /700 credits/);
+    assert.equal(await controls.locator('#subscriptionActions').isHidden(), true);
+    assert.match(await controls.locator('#confirmUpgrade').textContent(), /Pay.*2\.50.*upgrade/);
+    assert.equal((await worker.evaluate(() => hostedCalls.filter(c => c.route === '/v1/subscription/change'))).length, 0);
+    await controls.evaluate(() => { upgradeQuote.expiresAt = Date.now()-1; controls(); });
+    assert.equal(await controls.locator('#confirmUpgrade').textContent(), 'Get a new quote');
+    await controls.locator('#confirmUpgrade').click();
+    await until(async () => (await controls.locator('#confirmUpgrade').textContent()).startsWith('Pay'));
     assert.equal((await worker.evaluate(() => hostedCalls.filter(c => c.route === '/v1/subscription/change'))).length, 0);
     await controls.locator('#confirmUpgrade').click();
     await until(async () => (await controls.locator('#creditBreakdown').textContent()).includes('900 monthly credits'));
@@ -321,3 +333,89 @@ test('reopening the popup can retry a lost billing response using the original c
     assert.equal(await worker.evaluate(()=>serverCredits),910);
   }finally{await controls.close();}
 });
+
+test('payment problems offer billing recovery instead of another plan change', async () => {
+  const controls = await popup();
+  try {
+    await controls.locator('#accountEntry').click();
+    const subscription = { planId: 'basic', status: 'active', allowance: 500, periodEnd: Date.now()+86400000, cancelAtPeriodEnd: false };
+    for (const state of [
+      { status: 'past_due', paymentActionRequired: true },
+      { pendingUpgrade: true }
+    ]) {
+      await worker.evaluate(async state => {
+        hostedMock.subscription = state;
+        await ClickItHosted.state(true);
+      }, { ...subscription, ...state });
+      await controls.evaluate(() => refresh());
+      assert.equal(await controls.locator('#upgradePlan').isHidden(), true);
+      assert.equal(await controls.locator('#manageSubscription').isVisible(), true);
+      assert.match(await controls.locator('#manageSubscription').textContent(), /Resolve payment/);
+    }
+  } finally { await controls.close(); }
+});
+
+test('checkout failures clear pending feedback and do not allow duplicate checkout clicks', async () => {
+  await worker.evaluate(async () => {
+    hostedMock.subscription = null; hostedMock.checkoutEnabled = true; await ClickItHosted.state(true);
+  });
+  const controls = await popup();
+  try {
+    await controls.locator('#accountEntry').click();
+    await controls.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      globalThis.checkoutAttempts = 0;
+      chrome.runtime.sendMessage = async message => {
+        if (message.type !== 'checkout') return original(message);
+        checkoutAttempts++;
+        await new Promise(resolve => { globalThis.finishCheckout = resolve; });
+        return { ok: false, error: 'Cannot open checkout. Try again.' };
+      };
+    });
+    await controls.locator('#buyCredits').click();
+    assert.equal(await controls.locator('#buyCredits').isDisabled(), true);
+    assert.equal(await controls.locator('#subscriptionPlan').isDisabled(), true);
+    assert.match(await controls.locator('#message').textContent(), /Opening secure checkout/);
+    await controls.evaluate(() => { document.getElementById('buyCredits').click(); finishCheckout(); });
+    await controls.waitForFunction(() => document.getElementById('message').textContent.includes('Cannot open checkout'));
+    assert.doesNotMatch(await controls.locator('#message').textContent(), /Opening/);
+    assert.equal(await controls.locator('#message').getAttribute('role'), 'alert');
+    assert.equal(await controls.locator('#buyCredits').isEnabled(), true);
+    assert.equal(await controls.evaluate(() => checkoutAttempts), 1);
+  } finally { await controls.close(); }
+});
+
+test('unavailable balances retain Refresh without offering another subscription', async () => {
+  const controls = await popup();
+  try {
+    await controls.locator('#accountEntry').click();
+    await controls.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      globalThis.balanceUnavailable = true;
+      chrome.runtime.sendMessage = async message => {
+        const reply = await original(message);
+        if (message.type === 'inspect' && balanceUnavailable) {
+          reply.data.hosted.balance = null;
+          reply.data.hosted.error = 'Offline. Try Refresh.';
+        }
+        return reply;
+      };
+      return refresh();
+    });
+    assert.equal(await controls.locator('#creditBalance').textContent(), 'Balance unavailable');
+    assert.equal(await controls.locator('#subscribeOptions').isHidden(), true);
+    assert.match(await controls.locator('#creditError').textContent(), /Offline/);
+    assert.equal(await controls.locator('#refreshBalance').isEnabled(), true);
+    await controls.evaluate(() => { balanceUnavailable = false; });
+    await controls.locator('#refreshBalance').click();
+    await until(async () => (await controls.locator('#creditBalance').textContent()).includes('credits left'));
+  } finally { await controls.close(); }
+});
+
+async function finishEditing(controls) {
+  await controls.evaluate(async () => {
+    document.activeElement?.blur();
+    await settingsSave;
+  });
+  if (await controls.locator('#settingsPanel').isVisible()) await controls.locator('#settingsToggle').click();
+}

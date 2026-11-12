@@ -28,7 +28,8 @@ function toolbar(tabId, badge = '', text = 'Clickit') {
 
 function reportStatus(tabId, value, badge) {
   const previous = statuses.get(tabId);
-  statuses.set(tabId, { ...value, lastAction: value.answer ? value : previous?.lastAction });
+  const kind = badge === 'ERR' ? 'error' : badge === '…' ? 'working' : badge === '!' ? 'notice' : 'success';
+  statuses.set(tabId, { ...value, kind, lastAction: value.answer ? value : previous?.lastAction });
   if (statuses.size > 64) statuses.delete(statuses.keys().next().value);
   toolbar(tabId, badge, value.text);
 }
@@ -54,7 +55,7 @@ async function startAnswer(tab) {
     if (config.billingMode === 'byok' && !config.byokConsent) throw new Error('Review and accept the data sharing disclosure in Settings before answering.');
     if (config.billingMode === 'hosted') {
       const hosted = await ClickItHosted.state();
-      if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
+      if (!hosted.configured) throw new Error('Hosted service is not configured in this build. Choose Your API key in Settings.');
       if (!hosted.registered) throw new Error('Start your free trial in Settings under AI access first.');
       if (!hosted.consented) throw new Error('Review and accept the data sharing disclosure in Settings before answering.');
       if (config.mode === 'vision' && !hosted.balance?.visionEnabled) throw new Error('Hosted Vision is awaiting compatibility validation. Use Text or your own API key.');
@@ -155,8 +156,8 @@ async function run(tabId, job, config) {
     suggested = action.suggested === true;
     delivered = true;
     if (suggested) suggestions.set(tabId, { target, windowId: job.windowId });
-    const status = { text: suggested ? 'Click the highlighted answer manually. No automatic click made.' :
-      action.clicked ? 'Answer clicked. Submit it yourself if needed.' : 'Answer already selected. No click needed.',
+    const status = { text: suggested ? 'Click the highlighted answer.' :
+      action.clicked ? 'Answer clicked. Submit when ready.' : 'Answer already selected.',
       answer: vision ? action.answer : q.options[result.index], confidence: result.confidence, apiMs: result.apiMs, totalMs: Math.round(performance.now() - started) };
     report(status, suggested ? '!' : '✓');
     if (config.billingMode === 'hosted') {
@@ -191,7 +192,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message.type === 'inspect') {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (message.opened && tab?.id && !jobs.has(tab.id)) toolbar(tab.id);
-      return { settings, hosted: await ClickItHosted.state(), busy: jobs.has(tab?.id) || (settings.billingMode === 'hosted' && jobs.size > 0), status: statuses.get(tab?.id) || { text: 'Ready. Press Answer for this question.' } };
+      return { settings, hosted: await ClickItHosted.state(), busy: jobs.has(tab?.id) || (settings.billingMode === 'hosted' && jobs.size > 0), status: statuses.get(tab?.id) || { text: 'Ready.' } };
     }
     if (Object.hasOwn(accountActions, message.type)) {
       if (jobs.size) throw new Error('Wait for the current answer before changing credits or access.');

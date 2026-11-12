@@ -18,7 +18,7 @@
   })();
   async function api(path, data, options = {}) {
     await ready;
-    if (!configured) throw new Error('Hosted service is not configured in this build. Use your own API key in Advanced settings.');
+    if (!configured) throw new Error('Hosted service is not configured in this build. Choose Your API key in Settings.');
     const response = await fetch(`${config.apiUrl}/v1/${path}`, {
       method: data === undefined ? 'GET' : 'POST',
       headers: { ...(options.anonymous ? {} : { Authorization: `Bearer ${options.credential || credential}` }),
