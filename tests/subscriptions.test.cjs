@@ -15,6 +15,8 @@ for (const planId of ['basic','plus']) test(`${planId} Checkout uses fixed month
   const form = new URLSearchParams(call.options.body);
   assert.equal(form.get('mode'), 'subscription'); assert.equal(form.get('line_items[0][price]'), `price_${planId}`);
   assert.equal(form.get('line_items[0][quantity]'), '1'); assert.equal(form.has('allow_promotion_codes'), false);
+  assert.equal(form.get('success_url'), 'https://clickit.example/purchase.html?checkout=complete');
+  assert.equal(form.get('cancel_url'), 'https://clickit.example/purchase.html?cancelled=1');
   assert.equal(form.get('subscription_data[metadata][clickit_installation]'), user.installationId);
   assert.match(form.get('custom_text[submit][message]'), /Renews monthly until canceled/);
   assert.match(form.get('custom_text[submit][message]'), /https:\/\/clickit.example\/terms.html/);
@@ -161,6 +163,8 @@ test('maintenance recovers missed renewals, key restoration shares state, and bi
   s.env.CHECKOUT_ENABLED='false';
   const portal = await s.req('billing-portal', {}, user.credential);
   assert.equal(portal.status, 200); assert.equal((await portal.json()).url, 'https://billing.stripe.com/p/session_test');
+  const portalCall = s.calls.find(c => c.url.endsWith('/billing_portal/sessions'));
+  assert.equal(new URLSearchParams(portalCall.options.body).get('return_url'), 'https://clickit.example/purchase.html?billing=return');
   assert.equal((await s.change(user, 'cancel')).status, 200);
   assert.equal((await s.req('subscription/preview', { planId: 'plus' }, user.credential)).status, 403);
   s.remote.portalUpdates=true;

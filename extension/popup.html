@@ -3,10 +3,12 @@
 <body>
   <header class="brand">
     <span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 4 13 8-6 1-3 6z"/></svg></span>
-    <h1>Clickit</h1>
+    <h1 id="viewTitle">Clickit</h1>
     <p id="answerShortcut" class="shortcut-hint"></p>
     <button id="settingsToggle" type="button" aria-label="Settings" title="Settings" aria-controls="settingsPanel" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg></button>
   </header>
+  <p id="message" role="status" tabindex="-1"></p>
+  <main id="answerPanel">
   <fieldset id="mode" class="mode-control" aria-label="Read question using" disabled>
     <label class="mode-option">
       <input type="radio" name="mode" value="text" checked>
@@ -17,18 +19,22 @@
       <span><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m4 17 5-5 4 4 3-3 5 5"/><circle cx="8" cy="9" r="1"/></svg>Vision</span>
     </label>
   </fieldset>
-  <button id="answerNow" type="button" aria-label="Answer" aria-describedby="answer" disabled>
+  <p id="modeHint" class="hint">Reads the question and choices on this page.</p>
+  <button id="answerNow" type="button" aria-label="Answer" disabled>
     <span class="answer-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8"/></svg></span>
     <span id="answerLabel">Answer</span>
-    <strong id="answer" aria-live="polite">No answer yet</strong>
   </button>
+  <section id="answerResult" aria-label="Last answer" hidden><span class="field-label">Last answer</span><strong id="answer" aria-live="polite">No answer yet</strong></section>
   <section class="status">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v1"/></svg>
-    <div><p id="status" role="status">Loading…</p><p id="timing"></p><p id="message" role="status"></p></div>
+    <div><p id="status" role="status">Loading…</p><p id="timing"></p></div>
   </section>
+  <button id="accountEntry" class="account-entry" type="button" disabled><span id="accountSummary">AI access</span><span id="accountAction">Get started →</span></button>
+  </main>
   <section id="settingsPanel" hidden>
     <form id="settings">
       <fieldset id="billingMode" class="billing-mode" aria-label="AI access">
+        <legend>AI access</legend>
         <div class="billing-mode-options">
           <label class="mode-option"><input type="radio" name="billingMode" value="hosted" checked><span>Clickit</span></label>
           <label class="mode-option"><input type="radio" name="billingMode" value="byok"><span>Your API key</span></label>
@@ -36,29 +42,30 @@
         <section id="hostedPanel" aria-label="AI credits">
           <div class="credit-heading"><strong id="creditBalance"><span class="trial-highlight">15 free</span> answers</strong><button id="refreshBalance" type="button">Refresh</button></div>
           <p id="creditBreakdown" hidden></p>
-          <p id="creditNote">Then <span class="plan-badge plan-badge-basic">Basic</span> $4.99/month for 500 credits or <span class="plan-badge">Plus</span> $9.99/month for 1,200 credits. No card required to try.</p>
+          <p id="creditNote">No card required. No automatic subscription.</p>
           <div id="trialConsent">
-            <label class="consent"><input id="adultConsent" type="checkbox">I am 18 or older and use Clickit for casual quizzes.</label>
-            <label class="consent"><input id="dataConsent" type="checkbox">I consent to Clickit, OpenRouter and TypeSafe processing quiz text or visible-tab screenshots, which may include personal data, for answers.</label>
-            <button id="startTrial" type="button">Start free trial</button>
+            <label class="consent"><input id="adultConsent" type="checkbox">I'm 18+ and use Clickit for casual quizzes.</label>
+            <label class="consent"><input id="dataConsent" type="checkbox">I consent to sharing quiz text or visible-tab screenshots with Clickit, OpenRouter and TypeSafe for answers. They may contain personal data.</label>
+            <button id="startTrial" class="primary" type="button">Try 15 free answers</button>
           </div>
-          <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan</label><select id="subscriptionPlan"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" type="button">Subscribe</button><p>Renews automatically. Monthly credits expire at renewal. See your total before subscribing.</p></div>
+          <div id="subscribeOptions" hidden><label for="subscriptionPlan">Monthly plan · USD</label><select id="subscriptionPlan" aria-describedby="planTerms"><option value="basic">Basic · $4.99/month · 500 credits</option><option value="plus">Plus · $9.99/month · 1,200 credits</option></select><button id="buyCredits" class="primary" type="button">Continue to checkout</button><p id="planTerms" class="hint">Renews monthly until canceled. Unused monthly credits expire at renewal. Review your total on Stripe before paying.</p><p class="hint">1 credit per valid suggestion, even if wrong. Failed requests are free.</p></div>
           <div id="subscriptionActions" hidden>
             <button id="upgradePlan" type="button" hidden>Upgrade to Plus</button>
-            <button id="downgradePlan" type="button" hidden>Switch to Basic next month</button>
-            <button id="keepPlan" type="button" hidden>Keep current plan</button>
-            <button id="manageSubscription" type="button">Manage subscription / payment</button>
-            <button id="cancelSubscription" type="button" hidden>Cancel renewal</button>
-            <button id="resumeSubscription" type="button" hidden>Keep subscription renewing</button>
+            <button id="manageSubscription" type="button">Manage billing</button>
+            <button id="downgradePlan" class="text-button" type="button" hidden>Switch to Basic at renewal</button>
+            <button id="keepPlan" class="text-button" type="button" hidden>Keep current plan</button>
+            <button id="cancelSubscription" class="text-button" type="button" hidden>Cancel renewal</button>
+            <button id="resumeSubscription" class="text-button" type="button" hidden>Resume renewal</button>
           </div>
-          <div id="upgradeQuote" hidden><p id="upgradeQuoteText" role="status"></p><button id="confirmUpgrade" type="button">Confirm upgrade</button><button id="dismissUpgrade" type="button">Back</button></div>
-          <button id="retryBilling" type="button" hidden>Retry syncing billing change</button>
-          <p id="creditError" role="status"></p>
-          <p class="account-links"><a id="privacyLink" target="_blank" rel="noreferrer" hidden>Privacy and terms</a> <a id="supportLink" target="_blank" rel="noreferrer">Support</a></p>
+          <section id="upgradeQuote" aria-label="Review upgrade" hidden><h2>Upgrade to Plus</h2><p id="upgradeQuoteText" role="status"></p><p id="upgradeExpiry" class="hint" role="status"></p><button id="confirmUpgrade" class="primary" type="button">Confirm upgrade</button><button id="dismissUpgrade" class="text-button" type="button">Back</button></section>
+          <button id="retryBilling" type="button" hidden>Retry billing update</button>
+          <p id="billingNotice" role="status"></p>
+          <p id="creditError" role="alert"></p>
+          <p class="account-links"><a id="privacyLink" target="_blank" rel="noreferrer" hidden>Privacy</a><a id="termsLink" target="_blank" rel="noreferrer" hidden>Terms</a><a id="supportLink" target="_blank" rel="noreferrer">Support</a></p>
         </section>
       </fieldset>
       <details id="byokSettings" class="api-key-settings">
-      <summary>API Key</summary>
+      <summary>API key</summary>
       <div class="api-credentials">
         <div class="api-credentials-controls">
           <select id="provider" aria-label="API provider"><option value="typesafe">TypeSafe</option><option value="openrouter">OpenRouter</option></select>
@@ -67,23 +74,29 @@
       </div>
       <label class="consent"><input id="byokConsent" type="checkbox"><span>I'm 18+ and accept the <a href="https://clickit.thammatorn-clickit.workers.dev/terms.html" target="_blank" rel="noreferrer">Terms</a>. See the <a href="https://clickit.thammatorn-clickit.workers.dev/privacy.html" target="_blank" rel="noreferrer">Clickit</a>, <a href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">OpenRouter</a>, and <a href="https://docs.typesafe.ai/legal" target="_blank" rel="noreferrer">TypeSafe privacy policies</a>.</span></label>
       </details>
-      <div class="prompt-field" id="promptSettings">
-        <div class="prompt-heading"><label id="promptLabel" for="textPrompt">Text prompt</label><button id="resetPrompt" type="button">Reset</button></div>
-        <textarea id="textPrompt" aria-label="Text prompt" rows="5" maxlength="6000"></textarea>
-        <textarea id="visionPrompt" aria-label="Vision prompt" rows="5" maxlength="6000" hidden></textarea>
-      </div>
       <section class="hotkey-settings" aria-labelledby="hotkeyLabel">
         <div class="hotkey-heading"><span id="hotkeyLabel">Answer hotkey</span><button id="changeShortcut" type="button" aria-label="Change answer hotkey" aria-describedby="hotkeyValue" title="Change shortcut"><kbd id="hotkeyValue">Loading…</kbd></button></div>
         <p id="hotkeyError" role="status"></p>
       </section>
-      <button type="submit" id="saveSettings">Save settings</button>
+      <details id="promptSettings" class="prompt-settings">
+      <summary>Custom prompts</summary>
+      <fieldset id="promptMode" class="segmented" aria-label="Edit prompt for"><label class="mode-option"><input type="radio" name="promptMode" value="text" checked><span>Text</span></label><label class="mode-option"><input type="radio" name="promptMode" value="vision"><span>Vision</span></label></fieldset>
+      <div class="prompt-field">
+        <div class="prompt-heading"><label id="promptLabel" for="textPrompt">Text prompt</label><button id="resetPrompt" type="button">Reset</button></div>
+        <textarea id="textPrompt" aria-label="Text prompt" rows="4" maxlength="6000"></textarea>
+        <textarea id="visionPrompt" aria-label="Vision prompt" rows="4" maxlength="6000" hidden></textarea>
+      </div>
+      </details>
+      <div class="settings-footer"><button type="submit" id="saveSettings">Save settings</button></div>
     </form>
     <details id="accessRecovery">
-      <summary>Back up or restore credit access</summary>
-      <p>This key gives access to your credits. Keep a private copy. Never share it or post it in an issue.</p>
-      <label for="hostedAccessKey">Installation access key</label>
+      <summary>Back up or restore access</summary>
+      <p>Save this key privately before reinstalling. Anyone with it can use your credits and manage billing.</p>
+      <label for="hostedAccessKey">Access key</label>
+      <div class="key-controls">
       <input id="hostedAccessKey" type="password" autocomplete="off" spellcheck="false" placeholder="ci_…">
-      <button id="showAccessKey" type="button">Show key</button>
+      <button id="showAccessKey" type="button" aria-controls="hostedAccessKey" aria-pressed="false">Show key</button>
+      </div>
       <button id="restoreAccess" type="button">Restore access</button>
     </details>
   </section>

@@ -127,6 +127,8 @@ test('new hosted installations ask for consent and never send an API request jus
     await controls.locator('#dataConsent').check();
     await controls.locator('#startTrial').click();
     await until(() => controls.locator('#trialConsent').isHidden());
+    assert.equal(await controls.locator('#settingsPanel').isHidden(), true);
+    assert.equal(await controls.locator('#answerNow').isVisible(), true);
     assert.equal(await controls.locator('#creditBalance').textContent(), '15 credits left');
     const calls = await worker.evaluate(() => hostedCalls);
     assert.equal(calls[0].body.adultConsent, true);
@@ -206,8 +208,9 @@ test('malformed hosted Text and Vision results release the credit without clicki
       await scenario(async (quiz, controls) => {
         const key = `${mode}Prompt`, prompt = `Custom ${mode} instructions.\nChoose the best answer.`;
         await controls.getByRole('button', { name: 'Settings', exact: true }).click();
+        await controls.locator('#promptSettings > summary').click();
         await controls.locator(`#${key}`).fill(prompt);
-        await controls.getByRole('button', { name: 'Save settings' }).click();
+        await controls.locator('#saveSettings').click();
         await controls.waitForFunction(() => document.getElementById('message').textContent === 'Saved.');
         await quiz.bringToFront();
         assert.equal((await start(controls)).ok, true);
@@ -275,6 +278,13 @@ test('subscription controls preview upgrades before charging and manage renewals
     await controls.locator('#upgradePlan').click();
     await controls.locator('#upgradeQuote').waitFor({ state:'visible' });
     assert.match(await controls.locator('#upgradeQuoteText').textContent(), /700 credits/);
+    assert.equal(await controls.locator('#subscriptionActions').isHidden(), true);
+    assert.match(await controls.locator('#confirmUpgrade').textContent(), /Pay.*2\.50.*upgrade/);
+    assert.equal((await worker.evaluate(() => hostedCalls.filter(c => c.route === '/v1/subscription/change'))).length, 0);
+    await controls.evaluate(() => { upgradeQuote.expiresAt = Date.now()-1; controls(); });
+    assert.equal(await controls.locator('#confirmUpgrade').textContent(), 'Get a new quote');
+    await controls.locator('#confirmUpgrade').click();
+    await until(async () => (await controls.locator('#confirmUpgrade').textContent()).startsWith('Pay'));
     assert.equal((await worker.evaluate(() => hostedCalls.filter(c => c.route === '/v1/subscription/change'))).length, 0);
     await controls.locator('#confirmUpgrade').click();
     await until(async () => (await controls.locator('#creditBreakdown').textContent()).includes('900 monthly credits'));
@@ -320,4 +330,118 @@ test('reopening the popup can retry a lost billing response using the original c
     assert.equal(changes.length,2);assert.equal(changes[0].body.changeId,changes[1].body.changeId);
     assert.equal(await worker.evaluate(()=>serverCredits),910);
   }finally{await controls.close();}
+});
+
+test('credit and payment states stay actionable at narrow widths and enlarged text', async () => {
+  const controls = await popup();
+  const errors = [];
+  controls.on('pageerror', error => errors.push(error.message));
+  try {
+    await controls.locator('#accountEntry').click();
+    assert.equal(await controls.locator('#viewTitle').textContent(), 'Settings');
+    assert.equal(await controls.locator('#saveSettings').textContent(), 'Done');
+    const subscription = { planId: 'basic', status: 'active', allowance: 500, periodEnd: Date.now()+86400000, cancelAtPeriodEnd: false };
+    for (const state of [
+      { name: 'empty', credits: 0, checkoutEnabled: true, subscription: null, note: /Choose a plan/, button: 'buyCredits' },
+      { name: 'checkout-unavailable', credits: 0, checkoutEnabled: false, subscription: null, note: /unavailable/, button: 'buyCredits', disabled: true },
+      { name: 'payment-due', credits: 0, checkoutEnabled: true, subscription: { ...subscription, status: 'past_due', paymentActionRequired: true }, note: /Payment needs attention/, button: 'manageSubscription' },
+      { name: 'upgrade-unpaid', credits: 200, checkoutEnabled: true, subscription: { ...subscription, pendingUpgrade: true }, note: /awaiting payment/, button: 'manageSubscription' },
+      { name: 'renewal-canceled', credits: 200, checkoutEnabled: true, subscription: { ...subscription, cancelAtPeriodEnd: true }, note: /Automatic renewal is off/, button: 'resumeSubscription' }
+    ]) {
+      await worker.evaluate(async state => {
+        serverCredits = state.credits;
+        Object.assign(hostedMock, { subscription: state.subscription, monthlyCredits: state.subscription ? state.credits : 0, checkoutEnabled: state.checkoutEnabled });
+        await ClickItHosted.state(true);
+      }, state);
+      await controls.evaluate(() => refresh());
+      assert.match(await controls.locator('#creditNote').textContent(), state.note);
+      assert.equal(await controls.locator(`#${state.button}`).isVisible(), true);
+      assert.equal(await controls.locator(`#${state.button}`).isDisabled(), Boolean(state.disabled));
+      if (state.subscription?.paymentActionRequired || state.subscription?.pendingUpgrade) {
+        assert.equal(await controls.locator('#upgradePlan').isHidden(), true);
+        assert.match(await controls.locator('#manageSubscription').textContent(), /Resolve payment/);
+        assert.equal(await controls.locator('#manageSubscription').evaluate(node => node.classList.contains('primary')), true);
+      }
+      for (const width of [320, 360]) {
+        await controls.setViewportSize({ width, height: 600 });
+        assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${state.name}: ${width}`);
+      }
+      await controls.locator('body').screenshot({ path: path.resolve(__dirname, `../test-results/ui-${state.name}.png`) });
+    }
+    await controls.locator('#promptSettings > summary').click();
+    await controls.locator('#accessRecovery > summary').click();
+    // Simulate 200% text enlargement without reducing the available viewport.
+    await controls.evaluate(() => {
+      const sizes = [...document.querySelectorAll('*')].map(node => [node, parseFloat(getComputedStyle(node).fontSize)]);
+      for (const [node, size] of sizes) node.style.fontSize = `${size*2}px`;
+    });
+    assert.equal(await controls.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await controls.locator('#saveSettings').scrollIntoViewIfNeeded();
+    assert.equal(await controls.locator('#saveSettings').isVisible(), true);
+    assert.deepEqual(errors, []);
+  } finally { await controls.close(); }
+});
+
+test('checkout failures clear pending feedback and do not allow duplicate checkout clicks', async () => {
+  await worker.evaluate(async () => {
+    hostedMock.subscription = null; hostedMock.checkoutEnabled = true; await ClickItHosted.state(true);
+  });
+  const controls = await popup();
+  try {
+    await controls.locator('#accountEntry').click();
+    await controls.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      globalThis.checkoutAttempts = 0;
+      chrome.runtime.sendMessage = async message => {
+        if (message.type !== 'checkout') return original(message);
+        checkoutAttempts++;
+        await new Promise(resolve => { globalThis.finishCheckout = resolve; });
+        return { ok: false, error: 'Cannot open checkout. Try again.' };
+      };
+    });
+    await controls.locator('#buyCredits').click();
+    assert.equal(await controls.locator('#buyCredits').isDisabled(), true);
+    assert.equal(await controls.locator('#subscriptionPlan').isDisabled(), true);
+    assert.match(await controls.locator('#billingNotice').textContent(), /Opening secure checkout/);
+    await controls.evaluate(() => { document.getElementById('buyCredits').click(); finishCheckout(); });
+    await controls.waitForFunction(() => document.getElementById('message').textContent.includes('Cannot open checkout'));
+    assert.equal(await controls.locator('#billingNotice').textContent(), '');
+    assert.equal(await controls.locator('#message').getAttribute('role'), 'alert');
+    assert.equal(await controls.locator('#buyCredits').isEnabled(), true);
+    assert.equal(await controls.evaluate(() => checkoutAttempts), 1);
+  } finally { await controls.close(); }
+});
+
+test('unavailable balances never appear as zero credits and access keys re-hide after restore', async () => {
+  const controls = await popup();
+  try {
+    await controls.locator('#accountEntry').click();
+    await controls.evaluate(() => {
+      const original = chrome.runtime.sendMessage.bind(chrome.runtime);
+      globalThis.balanceUnavailable = true;
+      chrome.runtime.sendMessage = async message => {
+        const reply = await original(message);
+        if (message.type === 'inspect' && balanceUnavailable) {
+          reply.data.hosted.balance = null;
+          reply.data.hosted.error = 'Offline. Try Refresh.';
+        }
+        return reply;
+      };
+      return refresh();
+    });
+    assert.equal(await controls.locator('#creditBalance').textContent(), 'Balance unavailable');
+    assert.equal(await controls.locator('#subscribeOptions').isHidden(), true);
+    assert.match(await controls.locator('#creditError').textContent(), /Offline/);
+    assert.equal(await controls.locator('#refreshBalance').isEnabled(), true);
+    await controls.evaluate(() => { balanceUnavailable = false; });
+    await controls.locator('#refreshBalance').click();
+    await until(async () => (await controls.locator('#creditBalance').textContent()).includes('credits left'));
+    await controls.locator('#accessRecovery > summary').click();
+    await controls.locator('#showAccessKey').click();
+    assert.equal(await controls.locator('#showAccessKey').getAttribute('aria-pressed'), 'true');
+    await controls.locator('#restoreAccess').click();
+    await until(async () => (await controls.locator('#message').textContent()).includes('restored'));
+    assert.equal(await controls.locator('#hostedAccessKey').getAttribute('type'), 'password');
+    assert.equal(await controls.locator('#showAccessKey').getAttribute('aria-pressed'), 'false');
+  } finally { await controls.close(); }
 });
